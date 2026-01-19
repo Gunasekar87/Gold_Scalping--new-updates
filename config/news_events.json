@@ -1,0 +1,16 @@
+{
+    "events": [
+        {
+            "title": "FOMC Meeting",
+            "time": "2023-12-13 19:00",
+            "impact": "HIGH",
+            "currency": "USD"
+        },
+        {
+            "title": "NFP",
+            "time": "2023-12-08 13:30",
+            "impact": "HIGH",
+            "currency": "USD"
+        }
+    ]
+}

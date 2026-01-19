@@ -19,7 +19,7 @@ import asyncio
 import math
 import MetaTrader5 as mt5
 from typing import Dict, List, Optional, Any, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict, is_dataclass
 from enum import Enum
 
 # Import constants
@@ -40,7 +40,9 @@ from .ai_core.trap_hunter import TrapHunter
 from src.config.settings import FLAGS, POLICY as _PTUNE, RISK as _RLIM
 from src.policy.hedge_policy import HedgePolicy, HedgeConfig
 from src.policy.risk_governor import RiskGovernor, RiskLimits
+from src.core.trade_authority import TradeAuthority # [PHASE 5] Supreme Court
 from src.utils.telemetry import TelemetryWriter, DecisionRecord
+from src.utils.data_normalization import normalize_positions, normalize_position
 from src.features.market_features import (
     spread_atr,
     zscore,
@@ -143,6 +145,10 @@ class TradingEngine:
             position_limit_per_1k=2,  # 2 positions per $1000 balance
             news_lockout=False,  # News lockout disabled by default
         ))
+        
+        # [PHASE 5] The Treasury & Supreme Court
+        self.authority = TradeAuthority()
+        logger.info(f"TradeAuthority initialized (Global Cap: {self.authority.current_global_cap})")
 
         # Async database components
         self.db_manager = db_manager
@@ -984,12 +990,32 @@ class TradingEngine:
                 return False, "Broker Error: Could not check positions"
                 
             if existing_positions:
-                # Check if any position is in the same direction as the signal
-                signal_direction = 0 if signal.action == TradeAction.BUY else 1  # 0=BUY, 1=SELL
-                for pos in existing_positions:
-                    # Position object has .type attribute (0=BUY, 1=SELL)
                     if pos.type == signal_direction:
                         return False, f"Position already exists in {signal.action.value} direction - awaiting TP/hedge trigger"
+
+        # [PHASE 5] The Treasury: Shadow Balance & Valkyrie Check
+        if not is_recovery_trade:
+             # Calculate Risk Metrics
+             risk_metrics = {
+                 "balance": account_info.get('balance', 0.0),
+                 "equity": account_info.get('equity', 0.0),
+                 "margin": account_info.get('margin', 0.0),
+                 "total_positions": self.position_manager.get_total_positions(),
+                 "total_exposure_pct": (account_info.get('margin', 0.0) / account_info.get('balance', 1.0)) if account_info.get('balance', 1.0) > 0 else 0.0,
+                 "account_drawdown_pct": self.position_manager._calculate_drawdown(account_info.get('balance', 0.0), account_info.get('equity', 0.0))
+             }
+             
+             veto, veto_reason = self._governor.veto(risk_metrics)
+             if veto:
+                 return False, f"Risk Governor Veto: {veto_reason}"
+
+             # [PHASE 5] Supreme Court: Global Cap & Dynamic Layers
+             # Note: validate_trade_entry is for NEW ENTRIES ("OPEN")
+             approved, reason = self.authority.check_constitution(
+                 self.broker, signal.symbol, lot_size, "OPEN"
+             )
+             if not approved:
+                 return False, f"Unconstitutional: {reason}"
 
         # --- HFT LAYER 7: ORDER BOOK IMBALANCE (OBI) FILTER (INTELLIGENCE ONLY) ---
         # OBI and Direction Validator are used for GUIDANCE, NOT BLOCKING
@@ -1503,6 +1529,12 @@ class TradingEngine:
         Returns:
             True if positions were managed (closed/opened)
         """
+        # [ROBUSTNESS] Ensure all positions are dicts before processing
+        # This prevents TypeError: 'Position' object is not subscriptable in RiskManager
+        # [ROBUSTNESS] Ensure all positions are dicts before processing
+        # This prevents TypeError: 'Position' object is not subscriptable in RiskManager
+        positions = normalize_positions(positions)
+
         logger.info(f"[POS_MGMT] Called for {symbol} with {len(positions)} positions")
         
         if not positions:
@@ -2062,11 +2094,27 @@ class TradingEngine:
             safe_atr = atr_value if atr_value is not None else 0.0
             safe_vol = volatility_ratio if volatility_ratio is not None else 1.0
 
+            # [PHASE 5] Supreme Court: Dynamic Hedge Limits
+            # Before we recover, check if a new hedge is Constitutional.
+            # "HEDGE" action checks against current_hedge_cap (4-6) depending on volatility.
+            hedge_approved, hedge_reason = self.authority.check_constitution(
+                self.broker, symbol, 0.01, "HEDGE" # Volume estimate for check
+            )
+            
+            if not hedge_approved:
+                 # [PLAN B] If Hedge is blocked by Constitution (e.g. Volatility Cap hit),
+                 # we enforce "Reversion Escape" (Plan B) to exit at break-even instead of stacking risk.
+                 logger.warning(f"⚖️ [ZONE_CHECK] Hedge BLOCKED by Supreme Court: {hedge_reason}")
+                 logger.info(f"🛡️ [PLAN B] Activating Reversion Escape Protocol for {symbol}")
+                 setattr(self, f"_plan_b_veto_{symbol}", True)
+                 return bucket_closed
+
             logger.info(f"[ZONE_CHECK] Calling execute_zone_recovery for {symbol} with {len(positions_dict)} positions | ATR: {safe_atr:.5f} | VolRatio: {safe_vol:.2f}")
             zone_recovery_executed = self.risk_manager.execute_zone_recovery(
                 self.broker, symbol, positions_dict, tick, point_value,
                 shield, ppo_guardian, self.position_manager, bool(self._strict_entry), oracle=oracle, atr_val=atr_value,
-                volatility_ratio=volatility_ratio, rsi_value=rsi_value, trap_hunter=trap_hunter, pressure_metrics=pressure_metrics
+                volatility_ratio=volatility_ratio, rsi_value=rsi_value, trap_hunter=trap_hunter, pressure_metrics=pressure_metrics,
+                max_hedges_override=self.authority.current_hedge_cap # [PHASE 5] Dynamic Cap
             )
             if zone_recovery_executed:
                 logger.info(f"[ZONE] RECOVERY EXECUTED for {symbol}")
@@ -2283,7 +2331,7 @@ class TradingEngine:
             # [UI FEEDBACK] Log resumption if we were previously paused
             if self.last_pause_reason is not None:
                 logger.info(f"[RESUMED] TRADING RESUMED: Market conditions normalized.")
-                # print(f">>> [RESUMED] Market conditions normalized.", flush=True)  # Disabled to reduce noise
+
                 self.last_pause_reason = None
 
             # Get account info
@@ -2308,7 +2356,7 @@ class TradingEngine:
                     for p in all_pos:
                         s = p.symbol if hasattr(p, 'symbol') else (p.get('symbol') if isinstance(p, dict) else 'Unknown')
                         visible_symbols.add(s)
-                    # logger.info(f"[DEBUG] Visible positions in broker: {list(visible_symbols)}")
+
 
                 positions = []
                 for p in all_pos:
@@ -2330,11 +2378,8 @@ class TradingEngine:
                              match = True
                      
                      if match:
-                         # FIX: Convert namedtuple to dict for downstream compatibility
-                         if hasattr(p, '_asdict'):
-                             positions.append(p._asdict())
-                         else:
-                             positions.append(p)
+                         # FIX: Convert namedtuple/dataclass to dict for downstream compatibility
+                         positions.append(normalize_position(p))
             
             # [CRITICAL FIX] Handle Broker API Failure
             if positions is None:
@@ -2352,7 +2397,13 @@ class TradingEngine:
             # [STRICT ENTRIES] Require real, sufficient, fresh inputs before opening new positions.
             macro_context = self.market_data.get_macro_context()
             atr_value, trend_strength = self._calculate_indicators(symbol)
+            atr_value, trend_strength = self._calculate_indicators(symbol)
             rsi_value = self.market_data.calculate_rsi(symbol)
+            
+            # [PHASE 5] Update Constitution (Dynamic Layers)
+            # Fetch equity for scaling
+            current_equity = self.broker.get_equity()
+            self.authority.update_constitution(atr_value, current_equity)
 
             # Freshness gate applies to any NEW entry attempt (even if strict mode is off)
             if self._freshness_gate:
@@ -2430,9 +2481,40 @@ class TradingEngine:
                      # Quick fix: Use min volume (0.01) * 5 or configured base.
                      base_vol = 0.1 # Default Predator size
                      
-                     # Validate with Risk Governor (Is it safe?)
-                     # We reuse _check_global_safety mostly, but we should make sure we aren't overloaded.
-                     if self.position_manager.get_total_positions() < self._governor.limits.max_global_positions:
+                     # [SAFETY] Validate with Risk Governor (Shadow Balance & Valkyrie Check)
+                     # Fetch fresh metrics for accurate risk assessment
+                     acct_info = self.broker.get_account_info()
+                     risk_metrics = {
+                         "balance": acct_info.get('balance', 0.0),
+                         "equity": acct_info.get('equity', 0.0),
+                         "margin": acct_info.get('margin', 0.0),
+                         "total_positions": self.position_manager.get_total_positions(),
+                         # Approximate exposure/drawdown if not easily available, or fetch properly
+                         "total_exposure_pct": (acct_info.get('margin', 0.0) / acct_info.get('balance', 1.0)) if acct_info.get('balance', 1.0) > 0 else 0.0,
+                         "account_drawdown_pct": self.position_manager._calculate_drawdown(acct_info.get('balance', 0.0), acct_info.get('equity', 0.0))
+                     }
+
+                     # [SAFETY] Validate with Risk Governor (Shadow Balance & Valkyrie Check)
+                     # Fetch fresh metrics for accurate risk assessment
+                     acct_info = self.broker.get_account_info()
+                     risk_metrics = {
+                         "balance": acct_info.get('balance', 0.0),
+                         "equity": acct_info.get('equity', 0.0),
+                         "margin": acct_info.get('margin', 0.0),
+                         "total_positions": self.position_manager.get_total_positions(),
+                         # Approximate exposure/drawdown if not easily available, or fetch properly
+                         "total_exposure_pct": (acct_info.get('margin', 0.0) / acct_info.get('balance', 1.0)) if acct_info.get('balance', 1.0) > 0 else 0.0,
+                         "account_drawdown_pct": self.position_manager._calculate_drawdown(acct_info.get('balance', 0.0), acct_info.get('equity', 0.0))
+                     }
+
+                     veto, veto_reason = self._governor.veto(risk_metrics)
+                     
+                     # [PHASE 5] Validate with Supreme Court (Global Cap & Dynamic Layers)
+                     approved, reason = self.authority.check_constitution(
+                         self.broker, symbol, base_vol, "OPEN"
+                     )
+                     
+                     if not veto and approved:
                           await self.broker.execute_order(
                                 symbol=symbol,
                                 action="OPEN",
@@ -2444,8 +2526,11 @@ class TradingEngine:
                                 trace_reason=f"PREDATOR_{trap_signal.trap_type}"
                           )
                           return # Skip standard AI logic
-                     else:
-                          logger.warning("[PREDATOR] Signal valid but Max Global Positions reached.")
+                     
+                     if veto:
+                          logger.warning(f"[PREDATOR] Signal valid but Risk Governor Veto: {veto_reason}")
+                     if not approved:
+                          logger.warning(f"[PREDATOR] Signal valid but Unconstitutional: {reason}")
 
             # --- LAYER 4: ORACLE ENGINE ---
             oracle_prediction = "NEUTRAL"

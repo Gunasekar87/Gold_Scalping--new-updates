@@ -1,0 +1,22 @@
+trading:
+  symbol: "XAUUSD"
+  timeframe: "M1"
+  magic_number: 888888
+  broker_type: "MT5"
+
+risk:
+  global_risk_percent: 1.0
+  initial_lot: 0.01
+  zone_recovery:
+    zone_pips: 25.0
+    tp_pips: 25.0
+    max_layers: 5
+
+ai_parameters:
+  nexus_confidence_threshold: 0.30
+  atr_zone_multiplier: 1.0
+  atr_tp_multiplier: 1.0
+
+database:
+  db_type: "sqlite"
+  path: "data/market_memory.db"

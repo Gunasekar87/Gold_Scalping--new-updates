@@ -33,7 +33,7 @@ except ImportError:
     EXPLAINER_AVAILABLE = False
 
 from .ai_core.architect import Architect
-from .ai_core.architect import Architect
+
 from .core.trade_authority import TradeAuthority
 from .core.bad_bank import BadBank
 
@@ -712,8 +712,26 @@ class PositionManager:
             if not signal:
                  # Check if deficit is critical
                  if deficit > (acct_equity * 0.20):
+                     # [OPTIMIZATION] Check Trade Authority Limits FIRST to avoid Veto Loop
+                     # If we are already at max positions, attempting recovery is futile and causes log spam.
+                     if self.trade_authority and hasattr(self.trade_authority, 'current_global_cap'):
+                         current_count = self.get_total_positions()
+                         max_cap = self.trade_authority.current_global_cap
+                         
+                         if current_count >= max_cap:
+                             # Throttle "Capped" Log
+                             if not hasattr(self, '_last_capped_log'): self._last_capped_log = 0
+                             if time.time() - self._last_capped_log > 60:
+                                 logger.warning(f"[GOD MODE] EMERGENCY CRITICAL: Deficit ${deficit:.2f} but Global Cap Reached ({current_count}/{max_cap}). Recovery Postponed.")
+                                 self._last_capped_log = time.time()
+                             return False
+
                      signal = True
-                     logger.warning(f"[GOD MODE] EMERGENCY TRIGGER: Deficit ${deficit:.2f} > 20% Equity. Forcing Recovery.")
+                     # Throttle Log (prevent spam loop with TradeAuthority)
+                     if not hasattr(self, '_last_emergency_log'): self._last_emergency_log = 0
+                     if time.time() - self._last_emergency_log > 60:
+                         logger.warning(f"[GOD MODE] EMERGENCY TRIGGER: Deficit ${deficit:.2f} > 20% Equity. Forcing Recovery.")
+                         self._last_emergency_log = time.time()
                  
                  # Also fallback to time-based if > 30 mins
                  duration_mins = (time.time() - stats.open_time) / 60

@@ -92,7 +92,8 @@ class TrapHunter:
         # Condition: Price Breaks High + "Absorption" or "Selling Pressure" or "Low Vol Rejection"
         if breakout_up:
             # Trap 1: Divergence (Price High, delta shows Selling)
-            if pressure_score < -5.0:  # Selling into the breakout
+            # [FIX] Increased threshold from -5.0 to -15.0 to filter noise
+            if pressure_score < -15.0:  # Strong Selling into the breakout
                 return TrapSignal(
                     True, "BULL_TRAP", 
                     0.85, "HIGH", 
@@ -101,7 +102,7 @@ class TrapHunter:
                 )
             
             # Trap 2: Exhaustion (Breakout with no velocity/volume)
-            if velocity < 2.0: # Creating a high with no participation
+            if velocity < 5.0: # Creating a high with no participation (Increased from 2.0)
                 return TrapSignal(
                     True, "LIQUIDITY_GRAB_UP",
                     0.65, "MEDIUM",
@@ -112,7 +113,8 @@ class TrapHunter:
         # --- SCENARIO B: BEAR TRAP (Fake Breakout Down) ---
         # Condition: Price Breaks Low + "Buying Pressure"
         if breakout_down:
-            if pressure_score > 5.0: # Buying into the breakdown
+            # [FIX] Increased threshold from 5.0 to 15.0
+            if pressure_score > 15.0: # Strong Buying into the breakdown
                 return TrapSignal(
                     True, "BEAR_TRAP", 
                     0.85, "HIGH", 
@@ -120,7 +122,7 @@ class TrapHunter:
                     "BUY", 0.85 # [PREDATOR] Buy the fake breakdown
                 )
              
-            if velocity < 2.0:
+            if velocity < 5.0: # (Increased from 2.0)
                  return TrapSignal(
                     True, "LIQUIDITY_GRAB_DOWN",
                     0.65, "MEDIUM",

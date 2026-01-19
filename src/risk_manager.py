@@ -19,8 +19,9 @@ import threading
 import math
 import MetaTrader5 as mt5
 from typing import Dict, List, Optional, Any, Tuple, Set, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict, is_dataclass
 from enum import Enum
+from src.utils.data_normalization import normalize_positions
 
 # Import enhanced trade explainer for detailed logging
 try:
@@ -176,7 +177,7 @@ class RiskManager:
         return self._hedge_states[symbol]
 
     def validate_hedge_conditions(self, broker, symbol: str, positions: List[Dict],
-                                tick: Dict, point: float, atr_val: float = 0.0) -> Tuple[bool, str]:
+                                tick: Dict, point: float, atr_val: float = 0.0, max_hedges_override: int = None) -> Tuple[bool, str]:
         """
         Validate if hedging conditions are met and safe.
         [INTELLIGENT FIX] Enforces Dynamic Minimum Distance based on ATR.
@@ -199,9 +200,10 @@ class RiskManager:
 
         with state.lock:
             # Safety Check 1: Max hedges per symbol
-            if len(positions) >= self.config.max_hedges:
-                logger.info(f"[HEDGE_CHECK] Max hedges reached ({len(positions)}/{self.config.max_hedges})")
-                return False, f"Max hedges reached ({len(positions)}/{self.config.max_hedges})"
+            limit = max_hedges_override if max_hedges_override is not None else self.config.max_hedges
+            if len(positions) >= limit:
+                logger.info(f"[HEDGE_CHECK] Max hedges reached ({len(positions)}/{limit})")
+                return False, f"Max hedges reached ({len(positions)}/{limit})"
 
             # Safety Check 2: Global position cap
             all_positions = broker.get_positions()
@@ -332,7 +334,8 @@ class RiskManager:
     def execute_zone_recovery(self, broker, symbol: str, positions: List[Dict],
                             tick: Dict, point: float, shield, ppo_guardian,
                             position_manager, strict_entry: bool, oracle=None, atr_val: float = None,
-                            volatility_ratio: float = 1.0, rsi_value: float = None, trap_hunter=None, pressure_metrics=None) -> bool:
+                            volatility_ratio: float = 1.0, rsi_value: float = None, trap_hunter=None, pressure_metrics=None,
+                            max_hedges_override: int = None) -> bool:
         """
         Execute zone recovery hedging if conditions are met.
         
@@ -358,6 +361,9 @@ class RiskManager:
             True if hedge was executed
         """
         global logger  # Ensure logger is accessible in exception handler
+
+        # [ROBUSTNESS] Ensure all positions are dicts to prevent TypeError in RiskManager logic
+        positions = normalize_positions(positions)
 
         # [RACE CONDITION FIX] Double Hedge Prevention Check
         # Check if we have a pending hedge that hasn't been confirmed yet
@@ -513,7 +519,7 @@ class RiskManager:
             logger.debug("[SMART_HEDGE] Insufficient candle data - using standard logic")
         
         # Validate conditions
-        can_hedge, reason = self.validate_hedge_conditions(broker, symbol, positions, tick, point, atr_val=atr_val)
+        can_hedge, reason = self.validate_hedge_conditions(broker, symbol, positions, tick, point, atr_val=atr_val, max_hedges_override=max_hedges_override)
 
         if not can_hedge:
             # Throttle cooldown logs

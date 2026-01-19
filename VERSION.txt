@@ -1,4 +1,13 @@
-﻿v6.6.1 (CONNECTION & VELOCITY PATCH) - 2026-01-09
+﻿v6.6.2 (INVERSE TRADING FIX) - 2026-01-19
+----------------------------------------------------------------
+[CRITICAL FIX] Inverse Trading Logic: Fixed "Sell -> Up" issue.
+      - Identified TrapHunter was 3x too sensitive (+/- 5.0 vs 15.0).
+      - Was treating minor pullbacks in strong trends as "Major Reversals".
+      - Raised thresholds to 15.0 to align with TickPressureAnalyzer.
+      - Result: Bot now respects strong trends and only fades massive institutional reversals.
+----------------------------------------------------------------
+
+v6.6.1 (CONNECTION & VELOCITY PATCH) - 2026-01-09
 ----------------------------------------------------------------
 [CRITICAL] Market Data: Fixed "Stale Tick" and "Failed to Select" errors.
       - Implemented Smart Symbol Recovery (Fuzzy Matching) in mt5_adapter.py.
@@ -141,6 +150,7 @@ v5.4.0 (THE NEXUS HARVESTER) - 2025-12-17
       - Replaces standard "Eraser" with AI-driven decision matrix.
       - Checks RSI & Tick Pressure before scalping.
       - Holds winning trades if momentum is strong (Maximizes "Ammo").
+      - Strikes immediately when momentum fades.
       - Strikes immediately when momentum fades.
       - Uses "The Scalpel" logic to surgically remove parts of losing trades.
 [NEW] MT5Adapter: Added support for Partial Closing (Volume-based).

@@ -17,6 +17,7 @@ Version: 1.0.0
 
 import logging
 from typing import Dict, Tuple, Optional
+from src.utils.data_normalization import normalize_positions
 
 logger = logging.getLogger("TradeAuthority")
 
@@ -100,20 +101,42 @@ class TradeAuthority:
         if all_positions is None:
             return False, "VETOED: Cannot read current positions (System Blind)"
             
+        # Optimize: Normalize once using utility
+        all_positions = normalize_positions(all_positions)
         total_positions = len(all_positions)
-        symbol_positions = len([p for p in all_positions if p['symbol'] == symbol])
+        symbol_positions = len([p for p in all_positions if p.get('symbol') == symbol])
         
         # AMENDMENT 1: Global Cap (The "Unlimited Trade" Fix)
         if total_positions >= self.current_global_cap:
             msg = f"VETOED: Global Cap Reached ({total_positions}/{self.current_global_cap}). State: {self.volatility_state}"
-            logger.warning(f"[SUPREME COURT] {msg}")
+            
+            # Throttle Veto Log
+            import time
+            current_time = time.time()
+            if not hasattr(self, '_last_veto_log'): self._last_veto_log = {}
+            last_time = self._last_veto_log.get('global_cap', 0)
+            
+            if current_time - last_time > 60:
+                logger.warning(f"[SUPREME COURT] {msg}")
+                self._last_veto_log['global_cap'] = current_time
+                
             return False, msg
             
         # AMENDMENT 2: Symbol Cap (The "Dynamic Layers")
         # We allow up to 'current_hedge_cap' (4 to 6).
         if symbol_positions >= self.current_hedge_cap:
             msg = f"VETOED: Symbol Cap Reached for {symbol} ({symbol_positions}/{self.current_hedge_cap}). State: {self.volatility_state}"
-            logger.warning(f"[SUPREME COURT] {msg}")
+
+            # Throttle Veto Log
+            import time
+            current_time = time.time()
+            if not hasattr(self, '_last_veto_log'): self._last_veto_log = {}
+            last_time = self._last_veto_log.get(f'symbol_cap_{symbol}', 0)
+            
+            if current_time - last_time > 60:
+                logger.warning(f"[SUPREME COURT] {msg}")
+                self._last_veto_log[f'symbol_cap_{symbol}'] = current_time
+
             return False, msg
             
         # AMENDMENT 3: Volume/Exposure Check
