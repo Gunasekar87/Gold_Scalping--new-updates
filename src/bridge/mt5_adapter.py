@@ -21,15 +21,60 @@ class MT5Adapter(BrokerAdapter):
         self._resolved_symbols = {}  # Cache for fuzzy symbol matching
 
         # Persistent close executor to avoid per-batch threadpool startup overhead.
-        self._close_executor: Optional[ThreadPoolExecutor] = None
+        self._close_executor = None
         self._close_executor_max_workers: int = 0
         self._close_executor_lock = threading.Lock()
+
+    def _log_connection_details(self) -> None:
+        """Helper to log account info on successful connection."""
+        account_info = mt5.account_info()
+        if account_info:
+            logger.info(f"[MT5] Connected: Account #{account_info.login} | Server: {account_info.server}")
+            logger.info(f"[MT5] Balance: ${account_info.balance:.2f} | Equity: ${account_info.equity:.2f}")
+            logger.info(f"[MT5] Trade Mode: {'DEMO' if account_info.trade_mode == 1 else 'REAL' if account_info.trade_mode == 0 else 'CONTEST'}")
+            logger.info(f"[MT5] Trade Allowed: {self.is_trade_allowed()}")
+        else:
+            logger.warning("[MT5] Could not retrieve account information")
 
     def connect(self) -> bool:
         if mt5 is None:
             logger.error("MetaTrader5 module not found. Cannot connect.")
             return False
-        
+
+        # [PATCH] Soft Connect: Try to latch onto existing terminal first
+        # This fixes IPC Timeout (-10005) when terminal is already verified/running
+        try:
+             if mt5.initialize():
+                logger.info("[MT5] Successfully latched onto active terminal (Soft Connect).")
+                
+                # Check if we need to switch accounts
+                if self.login:
+                    info = mt5.account_info()
+                    current_login = info.login if info else 0
+                    
+                    if current_login == self.login:
+                        logger.info(f"[MT5] Already logged into the correct account: {self.login}")
+                        self._log_connection_details()
+                        return True
+                    else:
+                        logger.warning(f"[MT5] Account mismatch (Current: {current_login} != Required: {self.login}). Switching...")
+                        # If mismatch, we MUST try to login, but we use the already initialized terminal
+                        if mt5.login(login=self.login, password=self.password, server=self.server):
+                            logger.info(f"[MT5] Login switch successful.")
+                            self._log_connection_details()
+                            return True
+                        else:
+                            logger.error(f"[MT5] Login switch failed: {mt5.last_error()} (IPC may block if busy)")
+                            # Proceed to Hard Connect attempt below...
+                else:
+                    self._log_connection_details()
+                    return True
+        except Exception as e:
+            logger.warning(f"[MT5] Soft connect raised exception: {e}")
+
+        # If Soft Connect didn't return True, try Hard Connect
+        logger.info("[MT5] Attempting Hard Initialization (Credentials/Paths)...")
+
         # If credentials are provided, try to initialize with them
         if self.login and self.password and self.server:
             if not mt5.initialize(login=self.login, password=self.password, server=self.server):
@@ -69,14 +114,9 @@ class MT5Adapter(BrokerAdapter):
                     return False
         
         # Log connection details for verification
-        account_info = mt5.account_info()
-        if account_info:
-            logger.info(f"[MT5] Connected: Account #{account_info.login} | Server: {account_info.server}")
-            logger.info(f"[MT5] Balance: ${account_info.balance:.2f} | Equity: ${account_info.equity:.2f}")
-            logger.info(f"[MT5] Trade Mode: {'DEMO' if account_info.trade_mode == 1 else 'REAL' if account_info.trade_mode == 0 else 'CONTEST'}")
-            logger.info(f"[MT5] Trade Allowed: {self.is_trade_allowed()}")
-        else:
-            logger.warning("[MT5] Could not retrieve account information")
+                
+        self._log_connection_details()
+        return True
                 
         return True
 

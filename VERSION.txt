@@ -1,5 +1,12 @@
-﻿v6.6.2 (INVERSE TRADING FIX) - 2026-01-19
+﻿v6.6.3 (IPC CONNECTION HOTFIX) - 2026-01-19
 ----------------------------------------------------------------
+[HOTFIX] MT5 Connection: Fixed "IPC timeout" (-10005) on startup.
+      - Implemented "Soft Connect" logic in mt5_adapter.py.
+      - Bot now latches onto existing terminal process instead of forcing re-init.
+      - Resolves deadlock when terminal is already running/busy.
+----------------------------------------------------------------
+
+v6.6.2 (INVERSE TRADING FIX) - 2026-01-19
 [CRITICAL FIX] Inverse Trading Logic: Fixed "Sell -> Up" issue.
       - Identified TrapHunter was 3x too sensitive (+/- 5.0 vs 15.0).
       - Was treating minor pullbacks in strong trends as "Major Reversals".
