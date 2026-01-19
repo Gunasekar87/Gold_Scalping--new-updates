@@ -224,7 +224,7 @@ class RiskManager:
             last_pos = sorted_pos[-1]
             age_since_last = current_server_time - last_pos['time']
             if age_since_last < self.config.min_age_seconds:
-                logger.info(f"[HEDGE_CHECK] Position too young ({age_since_last:.1f}s < {self.config.min_age_seconds}s)")
+                logger.debug(f"[HEDGE_CHECK] Position too young ({age_since_last:.1f}s < {self.config.min_age_seconds}s)")
                 return False, f"Position too young ({age_since_last:.1f}s < {self.config.min_age_seconds}s)"
 
             # [INTELLIGENT FIX] Safety Check 3.5: Minimum Distance (Dynamic ATR)
@@ -274,13 +274,13 @@ class RiskManager:
             # Safety Check 4: Hedge cooldown
             time_since_hedge = time.time() - state.last_hedge_time
             if time_since_hedge < self.config.hedge_cooldown_seconds:
-                logger.info(f"[HEDGE_CHECK] Hedge cooldown active ({time_since_hedge:.1f}s < {self.config.hedge_cooldown_seconds}s)")
+                logger.debug(f"[HEDGE_CHECK] Hedge cooldown active ({time_since_hedge:.1f}s < {self.config.hedge_cooldown_seconds}s)")
                 return False, f"Hedge cooldown active ({time_since_hedge:.1f}s < {self.config.hedge_cooldown_seconds}s)"
 
             # Safety Check 5: Bucket close cooldown
             # This would be checked by the caller using position manager
 
-            logger.info(f"[HEDGE_CHECK] All conditions met - hedging allowed")
+            logger.debug(f"[HEDGE_CHECK] All conditions met - hedging allowed")
             return True, "Conditions met for hedging"
 
     def calculate_zone_parameters(self, positions: List[Dict], tick: Dict, point: float,
