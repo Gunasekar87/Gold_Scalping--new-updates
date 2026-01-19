@@ -300,7 +300,7 @@ class IronShield:
         if hedge_level >= 3:
             profit_target_percent = 0.01 # Just 1% buffer (Survival)
             # Override aggression in survival mode - safety first
-            logger.info(f"[IRON SHIELD] Survival Mode (Level {hedge_level}): Dropping profit target to 1%")
+            logger.debug(f"[IRON SHIELD] Survival Mode (Level {hedge_level}): Dropping profit target to 1%")
             
         # 4. The Mathematical Guarantee (The "Nil Loss" Equation)
         # L2 = (L1 * (Zone + Spread) + (L1 * TP) + ProfitBuffer) / (TP - Spread)

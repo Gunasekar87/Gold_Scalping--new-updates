@@ -990,7 +990,7 @@ class MT5Adapter(BrokerAdapter):
         # Use epsilon for comparison
         epsilon = 0.0000001
         if abs(normalized - requested_lot) > epsilon:
-            logger.info(f"[LOT NORMALIZE] {requested_lot} -> {normalized} (step: {volume_step})")
+            logger.debug(f"[LOT NORMALIZE] {requested_lot} -> {normalized} (step: {volume_step})")
         
         return normalized
 

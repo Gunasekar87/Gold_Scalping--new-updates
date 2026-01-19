@@ -350,7 +350,7 @@ class TradingEngine:
                 self._time_offset = raw_diff
                 self._last_offset_calc = now
                 if old_offset is None:
-                    logger.info(f"[FRESHNESS] Detected Timezone Offset: {self._time_offset:.2f}s ({self._time_offset/3600:.1f} hours). Auto-adjusting freshness checks.")
+                    logger.debug(f"[FRESHNESS] Detected Timezone Offset: {self._time_offset:.2f}s ({self._time_offset/3600:.1f} hours). Auto-adjusting freshness checks.")
                 elif abs(old_offset - self._time_offset) > 60:  # Log if drift > 1 minute
                     logger.warning(f"[FRESHNESS] Updated Timezone Offset: {old_offset:.2f}s → {self._time_offset:.2f}s")
             else:
@@ -1034,7 +1034,7 @@ class TradingEngine:
         
         # Log OBI status for information only (NO BLOCKING)
         if obi_applicable and not obi_ok:
-            logger.info(f"[OBI_INFO] OBI unavailable, using Direction Validator ({validation_score:.0%}) for guidance")
+            logger.debug(f"[OBI_INFO] OBI unavailable, using Direction Validator ({validation_score:.0%}) for guidance")
         
         # If OBI is available, log it but DON'T block (only inform)
         if obi_ok:
@@ -1045,7 +1045,7 @@ class TradingEngine:
                 elif signal.action == TradeAction.SELL and obi > 0.3:
                     logger.warning(f"[OBI_INFO] Buy pressure detected (OBI: {obi:.2f}) but proceeding with SELL (Validation: {validation_score:.0%})")
                 else:
-                    logger.info(f"[OBI_INFO] OBI aligned with signal (OBI: {obi:.2f}, Validation: {validation_score:.0%})")
+                    logger.debug(f"[OBI_INFO] OBI aligned with signal (OBI: {obi:.2f}, Validation: {validation_score:.0%})")
 
         # ALWAYS return True - NEVER block trades
         # Direction and lot size are already adjusted by Direction Validator
@@ -1540,7 +1540,7 @@ class TradingEngine:
         # This prevents TypeError: 'Position' object is not subscriptable in RiskManager
         positions = normalize_positions(positions)
 
-        logger.info(f"[POS_MGMT] Called for {symbol} with {len(positions)} positions")
+        logger.debug(f"[POS_MGMT] Called for {symbol} with {len(positions)} positions")
         
         if not positions:
             return False
@@ -1561,7 +1561,7 @@ class TradingEngine:
 
         # Only log when we have multiple positions (actual bucket)
         if len(positions) > 1:
-            logger.info(f"[BUCKET] Checking exit for {symbol}: {len(positions)} positions")
+            logger.debug(f"[BUCKET] Checking exit for {symbol}: {len(positions)} positions")
 
         # Check for bucket exits first
         bucket_closed = False
@@ -1581,7 +1581,7 @@ class TradingEngine:
             if position_objects:
                 bucket_id = self.position_manager.create_bucket(position_objects)
                 if len(positions) > 1:
-                    logger.info(f"[BUCKET] CREATED NEW: {bucket_id} with {len(positions)} positions")
+                    logger.debug(f"[BUCKET] CREATED NEW: {bucket_id} with {len(positions)} positions")
                 else:
                     logger.debug(f"[BUCKET] CREATED NEW: {bucket_id} for single position (enables TP/Zone tracking)")
         else:
@@ -1983,14 +1983,14 @@ class TradingEngine:
                     setattr(self, f"_plan_b_veto_{symbol}", False)
                     return True
         
-        logger.info(f"[TP_CHECK] About to call should_close_bucket for {bucket_id}")
+        logger.debug(f"[TP_CHECK] About to call should_close_bucket for {bucket_id}")
         should_close, confidence = self.position_manager.should_close_bucket(
             bucket_id, ppo_guardian, market_data
         )
-        logger.info(f"[TP_CHECK] should_close_bucket returned: {should_close}, confidence: {confidence}")
+        logger.debug(f"[TP_CHECK] should_close_bucket returned: {should_close}, confidence: {confidence}")
 
         if should_close:
-            logger.info(f"[BUCKET] EXIT TRIGGERED: Confidence {confidence:.3f} - Closing all positions")
+            logger.debug(f"[BUCKET] EXIT TRIGGERED: Confidence {confidence:.3f} - Closing all positions")
             bucket_closed = await self.position_manager.close_bucket_positions(
                 self.broker,
                 bucket_id,
@@ -2006,7 +2006,7 @@ class TradingEngine:
                 ppo_guardian=ppo_guardian,
             )
             if bucket_closed:
-                logger.info(f"[BUCKET] CLOSED SUCCESSFULLY: {bucket_id}")
+                logger.debug(f"[BUCKET] CLOSED SUCCESSFULLY: {bucket_id}")
             else:
                 logger.warning(f"[BUCKET] CLOSE FAILED: {bucket_id}")
         # Only log if exit was checked and failed (for debugging)
@@ -2048,7 +2048,7 @@ class TradingEngine:
                 logger.info(f"[MUSCLE] Calculated Recovery Executed for {bucket_id}")
                 return True
 
-            logger.info(f"[ZONE_CHECK] Bucket {bucket_id} not closed, checking zone recovery")
+            logger.debug(f"[ZONE_CHECK] Bucket {bucket_id} not closed, checking zone recovery")
             
             # Convert Position objects to dictionaries for zone recovery
             positions_dict = [
@@ -2114,7 +2114,7 @@ class TradingEngine:
                  setattr(self, f"_plan_b_veto_{symbol}", True)
                  return bucket_closed
 
-            logger.info(f"[ZONE_CHECK] Calling execute_zone_recovery for {symbol} with {len(positions_dict)} positions | ATR: {safe_atr:.5f} | VolRatio: {safe_vol:.2f}")
+            logger.debug(f"[ZONE_CHECK] Calling execute_zone_recovery for {symbol} with {len(positions_dict)} positions | ATR: {safe_atr:.5f} | VolRatio: {safe_vol:.2f}")
             zone_recovery_executed = self.risk_manager.execute_zone_recovery(
                 self.broker, symbol, positions_dict, tick, point_value,
                 shield, ppo_guardian, self.position_manager, bool(self._strict_entry), oracle=oracle, atr_val=atr_value,
@@ -2770,7 +2770,7 @@ class TradingEngine:
                             )
                             
                             if suggested_price:
-                                logger.info(
+                                logger.debug(
                                     f"[WICK INTELLIGENCE] 💡 Suggested entry: "
                                     f"{suggested_price:.2f} (current: {tick['bid']:.2f})"
                                 )
@@ -2934,28 +2934,28 @@ class TradingEngine:
             
             # [FORENSIC LOGGING] Track initial lot calculation
             initial_lot_size = lot_size
-            logger.info(f"[DECISION_PATH] ═══════════════════════════════════════════")
-            logger.info(f"[DECISION_PATH] TRADE DECISION ANALYSIS")
-            logger.info(f"[DECISION_PATH] ═══════════════════════════════════════════")
-            logger.info(f"[DECISION_PATH] 1. SIGNAL GENERATION:")
-            logger.info(f"[DECISION_PATH]    Worker: {signal.metadata.get('worker', 'Unknown')}")
-            logger.info(f"[DECISION_PATH]    Action: {signal.action.value}")
-            logger.info(f"[DECISION_PATH]    Confidence: {signal.confidence:.2%}")
-            logger.info(f"[DECISION_PATH]    Reason: {signal.reason}")
-            logger.info(f"[DECISION_PATH] 2. MARKET CONTEXT:")
-            logger.info(f"[DECISION_PATH]    Regime: {market_regime.name}")
-            logger.info(f"[DECISION_PATH]    ATR: {atr_value:.4f}")
-            logger.info(f"[DECISION_PATH]    Trend Strength: {trend_strength:.2f}")
-            logger.info(f"[DECISION_PATH]    RSI: {rsi_value:.1f}")
-            logger.info(f"[DECISION_PATH]    Validation Score: {validation_score:.0%}")
-            logger.info(f"[DECISION_PATH] 3. INITIAL LOT CALCULATION:")
-            logger.info(f"[DECISION_PATH]    Base Lot: {initial_lot_size:.4f}")
-            logger.info(f"[DECISION_PATH]    Reason: {lot_reason}")
-            logger.info(f"[DECISION_PATH] 4. PENALTIES TO APPLY:")
-            logger.info(f"[DECISION_PATH]    Regime Penalty: {regime_penalty:.2f}x")
-            logger.info(f"[DECISION_PATH]    Oracle Penalty: {oracle_penalty:.2f}x")
-            logger.info(f"[DECISION_PATH]    Brain Penalty: {brain_penalty:.2f}x")
-            logger.info(f"[DECISION_PATH]    Pressure Penalty: {pressure_penalty:.2f}x")
+            logger.debug(f"[DECISION_PATH] ═══════════════════════════════════════════")
+            logger.debug(f"[DECISION_PATH] TRADE DECISION ANALYSIS")
+            logger.debug(f"[DECISION_PATH] ═══════════════════════════════════════════")
+            logger.debug(f"[DECISION_PATH] 1. SIGNAL GENERATION:")
+            logger.debug(f"[DECISION_PATH]    Worker: {signal.metadata.get('worker', 'Unknown')}")
+            logger.debug(f"[DECISION_PATH]    Action: {signal.action.value}")
+            logger.debug(f"[DECISION_PATH]    Confidence: {signal.confidence:.2%}")
+            logger.debug(f"[DECISION_PATH]    Reason: {signal.reason}")
+            logger.debug(f"[DECISION_PATH] 2. MARKET CONTEXT:")
+            logger.debug(f"[DECISION_PATH]    Regime: {market_regime.name}")
+            logger.debug(f"[DECISION_PATH]    ATR: {atr_value:.4f}")
+            logger.debug(f"[DECISION_PATH]    Trend Strength: {trend_strength:.2f}")
+            logger.debug(f"[DECISION_PATH]    RSI: {rsi_value:.1f}")
+            logger.debug(f"[DECISION_PATH]    Validation Score: {validation_score:.0%}")
+            logger.debug(f"[DECISION_PATH] 3. INITIAL LOT CALCULATION:")
+            logger.debug(f"[DECISION_PATH]    Base Lot: {initial_lot_size:.4f}")
+            logger.debug(f"[DECISION_PATH]    Reason: {lot_reason}")
+            logger.debug(f"[DECISION_PATH] 4. PENALTIES TO APPLY:")
+            logger.debug(f"[DECISION_PATH]    Regime Penalty: {regime_penalty:.2f}x")
+            logger.debug(f"[DECISION_PATH]    Oracle Penalty: {oracle_penalty:.2f}x")
+            logger.debug(f"[DECISION_PATH]    Brain Penalty: {brain_penalty:.2f}x")
+            logger.debug(f"[DECISION_PATH]    Pressure Penalty: {pressure_penalty:.2f}x")
             
 
             # === ADAPTIVE VALIDATION MULTIPLIER ===
@@ -2971,7 +2971,7 @@ class TradingEngine:
                 tp_multiplier = 1.0
                 sl_multiplier = 1.0
                 adaptive_strategy = "TREND_FOLLOWING"
-                logger.info(f"[ADAPTIVE] Strong signal ({validation_score:.0%}) → Full size, standard TP/SL")
+                logger.debug(f"[ADAPTIVE] Strong signal ({validation_score:.0%}) → Full size, standard TP/SL")
                 
             elif validation_score >= 0.50:
                 # Moderate validation - Cautious scalping
@@ -2979,7 +2979,7 @@ class TradingEngine:
                 tp_multiplier = 0.6  # Tighter TP (60% of normal)
                 sl_multiplier = 0.7  # Tighter SL (70% of normal)
                 adaptive_strategy = "SCALPING"
-                logger.info(f"[ADAPTIVE] Moderate signal ({validation_score:.0%}) → Reduced size (60%), tight TP/SL (Scalp mode)")
+                logger.debug(f"[ADAPTIVE] Moderate signal ({validation_score:.0%}) → Reduced size (60%), tight TP/SL (Scalp mode)")
                 
             elif validation_score >= 0.40:
                 # Weak validation - Very cautious
@@ -2987,7 +2987,7 @@ class TradingEngine:
                 tp_multiplier = 0.4  # Very tight TP
                 sl_multiplier = 0.5  # Very tight SL
                 adaptive_strategy = "MICRO_SCALP"
-                logger.info(f"[ADAPTIVE] Weak signal ({validation_score:.0%}) → Minimal size (40%), micro-scalp TP/SL")
+                logger.debug(f"[ADAPTIVE] Weak signal ({validation_score:.0%}) → Minimal size (40%), micro-scalp TP/SL")
                 
             elif validation_score >= 0.25:
                 # Very weak - Range trading only
@@ -2995,7 +2995,7 @@ class TradingEngine:
                 tp_multiplier = 0.3  # Extremely tight TP
                 sl_multiplier = 0.4  # Extremely tight SL
                 adaptive_strategy = "RANGE_FADE"
-                logger.info(f"[ADAPTIVE] Very weak signal ({validation_score:.0%}) → Range fade (25% size, tight exits)")
+                logger.debug(f"[ADAPTIVE] Very weak signal ({validation_score:.0%}) → Range fade (25% size, tight exits)")
             else:
                 # Critical - Block trade
                 logger.warning(f"[ADAPTIVE] Critical divergence ({validation_score:.0%}) → Trade BLOCKED")
@@ -3018,7 +3018,7 @@ class TradingEngine:
                 # This enables MICRO_SCALP and RANGE_FADE modes to actually reduce size
                 lot_size = max(lot_size, 0.001)
                 lot_reason += f" (AI Penalty: {total_penalty:.2f}x)"
-                logger.info(f"[AI_COUNCIL] Consensus Weak. Reducing Size: {old_lot} -> {lot_size} lots")
+                logger.debug(f"[AI_COUNCIL] Consensus Weak. Reducing Size: {old_lot} -> {lot_size} lots")
 
             # --- CHAMELEON VOLATILITY SCALING ---
             # If Volatile, cut lot size in half for safety
@@ -3030,21 +3030,21 @@ class TradingEngine:
             if lot_size <= 0:
                 print(f">>> [DEBUG] Lot Size Rejected: {lot_reason}", flush=True)
                 logger.info(f"[POSITION] SIZING REJECTED: {lot_reason}")
-                logger.info(f"[DECISION_PATH] ═══════════════════════════════════════════")
-                logger.info(f"[DECISION_PATH] TRADE REJECTED: Lot size {lot_size:.4f} <= 0")
-                logger.info(f"[DECISION_PATH] ═══════════════════════════════════════════")
+                logger.debug(f"[DECISION_PATH] ═══════════════════════════════════════════")
+                logger.debug(f"[DECISION_PATH] TRADE REJECTED: Lot size {lot_size:.4f} <= 0")
+                logger.debug(f"[DECISION_PATH] ═══════════════════════════════════════════")
                 return
             
             # [FORENSIC LOGGING] Track final lot size after all multipliers
-            logger.info(f"[DECISION_PATH] 5. ADAPTIVE MULTIPLIER:")
-            logger.info(f"[DECISION_PATH]    Validation Multiplier: {validation_multiplier:.2f}x")
-            logger.info(f"[DECISION_PATH]    TP Multiplier: {tp_multiplier:.2f}x")
-            logger.info(f"[DECISION_PATH]    SL Multiplier: {sl_multiplier:.2f}x")
-            logger.info(f"[DECISION_PATH]    Strategy: {adaptive_strategy}")
-            logger.info(f"[DECISION_PATH] 6. FINAL LOT CALCULATION:")
-            logger.info(f"[DECISION_PATH]    Initial: {initial_lot_size:.4f}")
-            logger.info(f"[DECISION_PATH]    After Penalties: {lot_size:.4f}")
-            logger.info(f"[DECISION_PATH]    Total Multiplier: {(lot_size / initial_lot_size if initial_lot_size > 0 else 0):.4f}x")
+            logger.debug(f"[DECISION_PATH] 5. ADAPTIVE MULTIPLIER:")
+            logger.debug(f"[DECISION_PATH]    Validation Multiplier: {validation_multiplier:.2f}x")
+            logger.debug(f"[DECISION_PATH]    TP Multiplier: {tp_multiplier:.2f}x")
+            logger.debug(f"[DECISION_PATH]    SL Multiplier: {sl_multiplier:.2f}x")
+            logger.debug(f"[DECISION_PATH]    Strategy: {adaptive_strategy}")
+            logger.debug(f"[DECISION_PATH] 6. FINAL LOT CALCULATION:")
+            logger.debug(f"[DECISION_PATH]    Initial: {initial_lot_size:.4f}")
+            logger.debug(f"[DECISION_PATH]    After Penalties: {lot_size:.4f}")
+            logger.debug(f"[DECISION_PATH]    Total Multiplier: {(lot_size / initial_lot_size if initial_lot_size > 0 else 0):.4f}x")
 
 
             # Normalize lot size to broker requirements BEFORE logging or executing
@@ -3055,16 +3055,16 @@ class TradingEngine:
                 if raw_lot != lot_size:
                      # Only log if significant change
                      if abs(raw_lot - lot_size) > 0.000001:
-                        logger.info(f"[LOT ADJUST] Normalized {raw_lot} -> {lot_size} to match broker requirements")
-                        logger.info(f"[DECISION_PATH]    Broker Normalized: {raw_lot:.4f} -> {lot_size:.4f}")
+                        logger.debug(f"[LOT ADJUST] Normalized {raw_lot} -> {lot_size} to match broker requirements")
+                        logger.debug(f"[DECISION_PATH]    Broker Normalized: {raw_lot:.4f} -> {lot_size:.4f}")
 
             # Only log lot size if the signal was just logged (i.e., it changed)
             if self._last_signal_logged:
                 logger.info(f"[POSITION] SIZE CALCULATED: {lot_size} lots | Reason: {lot_reason}")
-                logger.info(f"[DECISION_PATH] 7. FINAL EXECUTION:")
-                logger.info(f"[DECISION_PATH]    Final Lot Size: {lot_size:.4f}")
-                logger.info(f"[DECISION_PATH]    Entry Price: ~{tick.get('ask' if signal.action == TradeAction.BUY else 'bid', 0):.2f}")
-                logger.info(f"[DECISION_PATH] ═══════════════════════════════════════════")
+                logger.debug(f"[DECISION_PATH] 7. FINAL EXECUTION:")
+                logger.debug(f"[DECISION_PATH]    Final Lot Size: {lot_size:.4f}")
+                logger.debug(f"[DECISION_PATH]    Entry Price: ~{tick.get('ask' if signal.action == TradeAction.BUY else 'bid', 0):.2f}")
+                logger.debug(f"[DECISION_PATH] ═══════════════════════════════════════════")
 
 
             # Final validation (is_recovery_trade=False for normal entries)
@@ -3116,7 +3116,7 @@ class TradingEngine:
                     logger.info(f"[TRADE] ENTRY BLOCKED: {entry_reason}")
                 return
 
-            logger.info(f"[TRADE] VALIDATION PASSED: All entry conditions met")
+            logger.debug(f"[TRADE] VALIDATION PASSED: All entry conditions met")
             
             # Update last_trade_time for global tracking
             self.last_trade_time = time.time()
@@ -3158,8 +3158,8 @@ class TradingEngine:
             
             # Log adaptive adjustments
             if tp_mult < 1.0 or sl_mult < 1.0:
-                logger.info(f"[ADAPTIVE] TP adjusted: {original_tp:.1f} → {tp_points:.1f} pips (x{tp_mult})")
-                logger.info(f"[ADAPTIVE] SL adjusted: {original_zone:.1f} → {zone_points:.1f} pips (x{sl_mult})")
+                logger.debug(f"[ADAPTIVE] TP adjusted: {original_tp:.1f} → {tp_points:.1f} pips (x{tp_mult})")
+                logger.debug(f"[ADAPTIVE] SL adjusted: {original_zone:.1f} → {zone_points:.1f} pips (x{sl_mult})")
             
             tp_pips = tp_points # This is in pips (e.g. 25.0 * 0.6 = 15.0 for scalp)
             

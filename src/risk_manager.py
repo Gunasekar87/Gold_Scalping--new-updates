@@ -499,21 +499,21 @@ class RiskManager:
             )
             
             # Log decision
-            logger.info(f"[SMART_HEDGE] {hedge_decision.reasoning}")
-            logger.info(f"[SMART_HEDGE] Expected outcome: {hedge_decision.expected_outcome}")
+            logger.debug(f"[SMART_HEDGE] {hedge_decision.reasoning}")
+            logger.debug(f"[SMART_HEDGE] Expected outcome: {hedge_decision.expected_outcome}")
             
             # Act on decision
             if not hedge_decision.should_hedge:
-                logger.info(f"[SMART_HEDGE] Skipping hedge: {hedge_decision.timing}")
+                logger.debug(f"[SMART_HEDGE] Skipping hedge: {hedge_decision.timing}")
                 return False
             
             if hedge_decision.timing != 'NOW':
-                logger.info(f"[SMART_HEDGE] Delaying hedge: {hedge_decision.timing}")
+                logger.debug(f"[SMART_HEDGE] Delaying hedge: {hedge_decision.timing}")
                 return False
             
             # Hedge NOW - adjust size based on confidence
             if hedge_decision.size_multiplier < 1.0:
-                logger.info(f"[SMART_HEDGE] Using partial hedge: {hedge_decision.size_multiplier:.0%}")
+                logger.debug(f"[SMART_HEDGE] Using partial hedge: {hedge_decision.size_multiplier:.0%}")
                 # Will apply multiplier later when calculating hedge_lot
         else:
             logger.debug("[SMART_HEDGE] Insufficient candle data - using standard logic")
@@ -537,10 +537,10 @@ class RiskManager:
                             remaining_msg = f" Resuming in {remaining:.1f}s"
                         except Exception as e:
                             logger.debug(f"[PAUSED] Failed parsing cooldown remaining time: {e}")
-                    logger.info(f"[PAUSED] Zone Recovery Halted: {reason}.{remaining_msg}")
+                    logger.debug(f"[PAUSED] Zone Recovery Halted: {reason}.{remaining_msg}")
                     self._last_log_time = current_time
             else:
-                logger.info(f"Zone recovery skipped for {symbol}: {reason}")
+                logger.debug(f"Zone recovery skipped for {symbol}: {reason}")
             return False
 
         state = self._get_hedge_state(symbol)
@@ -581,12 +581,12 @@ class RiskManager:
                 # Initial + 1 hedge = hedge_level 1
                 # Initial + 2 hedges = hedge_level 2, etc.
                 hedge_level = max(0, len(positions) - 1)
-                logger.info(f"[ZONE_DEBUG] No saved hedge_level, calculated from positions: {hedge_level}")
+                logger.debug(f"[ZONE_DEBUG] No saved hedge_level, calculated from positions: {hedge_level}")
             else:
                 hedge_level = saved_hedge_level
-                logger.info(f"[ZONE_DEBUG] Using saved hedge_level: {hedge_level}")
+                logger.debug(f"[ZONE_DEBUG] Using saved hedge_level: {hedge_level}")
             
-            logger.info(f"[ZONE_DEBUG] Current hedge level: {hedge_level} | Positions: {len(positions)}")
+            logger.debug(f"[ZONE_DEBUG] Current hedge level: {hedge_level} | Positions: {len(positions)}")
             
             # === PLAN VS EXECUTION ALIGNMENT ===
             # Check if we have a stored plan for this specific hedge level
