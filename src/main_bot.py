@@ -84,6 +84,8 @@ logging.getLogger("ZONE_CHECK").setLevel(logging.WARNING)
 logging.getLogger("SYNC").setLevel(logging.WARNING)
 logging.getLogger("PLAN").setLevel(logging.WARNING)
 logging.getLogger("CLOSE").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 class AetherBot:
