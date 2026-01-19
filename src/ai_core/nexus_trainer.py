@@ -156,7 +156,7 @@ class NexusTrainer:
                 
                 # Loss
                 loss_t = criterion_trend(pred_trend, batch_y_trend)
-                loss_v = criterion_vol(pred_vol.squeeze(), batch_y_vol)
+                loss_v = criterion_vol(pred_vol.squeeze(-1), batch_y_vol)
                 loss = loss_t + loss_v
                 
                 loss.backward()
