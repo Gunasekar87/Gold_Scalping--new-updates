@@ -243,7 +243,7 @@ class Oracle:
                 f"[ORACLE] Council: Macro({macro_signal:.2f}) | Micro({ai_score:.2f}) | Pressure({pressure_score:.2f}, raw={pressure_val:.2f}) | OBI({float(order_book_signal):.2f}) -> Coherence: {coherence:.2f}"
             )
         elif abs(ai_score) > 0.5 or coherence > 0.7:  # Only log when there's a strong signal
-            logger.info(
+            logger.debug(
                 f"[ORACLE] Strong Signal: Micro({ai_score:.2f}) | Pressure({pressure_score:.2f}) -> Coherence: {coherence:.2f}"
             )
         else:

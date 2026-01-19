@@ -1,3 +1,5 @@
-﻿6.6.8
-- Final Log Polish: Silenced RiskManager and HCB logs.
-- Minimal Terminal operational.
+﻿6.6.9
+- Complete Log Silence: Demoted ALL rolling logs to DEBUG (PPO_EXIT, CALIBRATED BUFFER, VETO, ZONE_CHECK, PLAN B, AI STATUS MONITOR, etc.)
+- Position Limit Increase: 5 → 10 positions per symbol (with dynamic 8-12 based on volatility)
+- Startup Cleanup: Minimal, clean initialization (one-line startup message)
+- AI Storytelling: Only Entry/Hedge/Exit reports visible at INFO level

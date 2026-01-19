@@ -517,7 +517,7 @@ class PPOGuardian:
                 exit_score += 0.2
             
             # Factor 3: Emergency Exit (Only if EXCEEDING max hedges)
-            if num_positions > 4:
+            if num_positions > 10:  # Increased from 4 to 10
                 reasons.append(f"Max hedge limit exceeded: {num_positions} positions")
                 exit_score += 0.4
             
@@ -532,7 +532,7 @@ class PPOGuardian:
             reason = " | ".join(reasons) if reasons else "Monitoring bucket"
             
             if should_exit:
-                logger.info(f"[PPO_EXIT] [EXIT] SIGNAL: Score={exit_score:.2f} | {reason}")
+                logger.debug(f"[PPO_EXIT] [EXIT] SIGNAL: Score={exit_score:.2f} | {reason}")
             else:
                 logger.debug(f"[PPO_EXIT] Holding: Score={exit_score:.2f} | Net P&L: ${net_pnl_usd:.2f} | Age: {position_age_minutes:.1f}min")
             

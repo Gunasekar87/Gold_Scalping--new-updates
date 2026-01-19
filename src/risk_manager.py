@@ -120,11 +120,11 @@ class ZoneConfig:
     """Configuration for zone recovery parameters."""
     zone_pips: float
     tp_pips: float
-    max_hedges: int = 4
+    max_hedges: int = 10  # Increased from 4 to 10 per user request
     min_age_seconds: float = 3.0
     hedge_cooldown_seconds: float = 15.0
     bucket_close_cooldown_seconds: float = 15.0
-    emergency_hedge_threshold: int = 4
+    emergency_hedge_threshold: int = 10  # Increased from 4 to 10
 
 
 @dataclass
@@ -320,14 +320,14 @@ class RiskManager:
         slippage_pad_pips = 0.0
         if atr_pips > 20.0: # Volatile
              slippage_pad_pips = atr_pips * 0.10
-             logger.info(f"[SLIPPAGE PAD] Added {slippage_pad_pips:.1f} pips to TP for volatility")
+             logger.debug(f"[SLIPPAGE PAD] Added {slippage_pad_pips:.1f} pips to TP for volatility")
 
         tp_pips = zone_pips + slippage_pad_pips
         
         zone_width_points = zone_pips * point
         tp_width_points = tp_pips * point
         
-        logger.info(f"[SURVIVAL] Grid Level {num_positions} -> Zone Width: {zone_pips:.1f} pips | TP: {tp_pips:.1f} pips")
+        logger.debug(f"[SURVIVAL] Grid Level {num_positions} -> Zone Width: {zone_pips:.1f} pips | TP: {tp_pips:.1f} pips")
 
         return zone_width_points, tp_width_points
 
@@ -604,7 +604,7 @@ class RiskManager:
                     stored_trigger_price = hedge_plan[plan_key_price]
                     stored_lots = hedge_plan.get(plan_key_lots, 0.0)
                     use_stored_plan = True
-                    logger.info(f"[PLAN] Found stored plan for Hedge {hedge_level}: Trigger @ {stored_trigger_price:.5f}, Lots: {stored_lots}")
+                    logger.debug(f"[PLAN] Found stored plan for Hedge {hedge_level}: Trigger @ {stored_trigger_price:.5f}, Lots: {stored_lots}")
 
             # Calculate dynamic parameters (still needed for zone width tracking)
             zone_width_points, tp_width_points = self.calculate_zone_parameters(
@@ -723,7 +723,7 @@ class RiskManager:
                         lower_level = stored_trigger_price
                         if upper_level == 0: upper_level = stored_trigger_price + (2 * self.config.zone_pips * point)
 
-                logger.info(f"[{symbol}] Plan Override: Hedge Level {hedge_level} -> Set {'Upper' if (upper_level == stored_trigger_price) else 'Lower'} = {stored_trigger_price}")
+                logger.debug(f"[{symbol}] Plan Override: Hedge Level {hedge_level} -> Set {'Upper' if (upper_level == stored_trigger_price) else 'Lower'} = {stored_trigger_price}")
 
             # Update state (for PPO learning)
             with state.lock:
@@ -742,7 +742,7 @@ class RiskManager:
             lower_pips = abs(first_pos['price_open'] - lower_level) * pip_multiplier
             upper_pips = abs(upper_level - first_pos['price_open']) * pip_multiplier
             
-            logger.info(f"[{symbol}] Zone Check: Bid={tick['bid']:.{precision}f}, Ask={tick['ask']:.{precision}f} | Lower={lower_level:.{precision}f} (-{lower_pips:.1f}pips), Upper={upper_level:.{precision}f} (+{upper_pips:.1f}pips)")
+            logger.debug(f"[{symbol}] Zone Check: Bid={tick['bid']:.{precision}f}, Ask={tick['ask']:.{precision}f} | Lower={lower_level:.{precision}f} (-{lower_pips:.1f}pips), Upper={upper_level:.{precision}f} (+{upper_pips:.1f}pips)")
 
             # CRITICAL FIX: Use Bid for SELL trigger (below lower) and Ask for BUY trigger (above upper)
             # For BUY position: Hedge trigger is BELOW entry (Sell Stop logic) -> Trigger when Bid <= Lower
@@ -1259,6 +1259,36 @@ class RiskManager:
             
             # [RACE CONDITION FIX] Lock this symbol immediately before network call
             self._pending_hedges[symbol] = time.time()
+            
+            # --- GENERATE HEDGE ENTRY PLAN ---
+            # Detailed AI Storytelling for user transparency
+            safe_rsi = rsi_value if rsi_value is not None else 50.0
+            safe_regime = "Unknown"
+            if volatility_ratio > 1.5: safe_regime = "Volatile"
+            elif volatility_ratio < 0.5: safe_regime = "Quiet"
+            else: safe_regime = "Normal"
+            
+            conf_str = "N/A"
+            factors_str = "Zone Breach"
+            if hedge_decision:
+                conf_str = f"{hedge_decision.confidence:.0%}"
+                significant = [f"{k.title()}: {v:.2f}" for k,v in hedge_decision.factors.items() if abs(v-1.0)>0.1]
+                if significant: factors_str = ", ".join(significant[:2])
+                
+            hedge_plan_log = (
+                f"\n>>> [HEDGE ENTRY PLAN] 🛡️ <<<\n"
+                f"Action:        {next_action} {hedge_lot:.3f} lots (Level {new_hedge_level})\n"
+                f"Virtual TP:    ~{target_price:.5f} (Recovery Mode)\n"
+                f"----------------------------------------------------\n"
+                f"LIVE DATA SNAPSHOT:\n"
+                f"• RSI (14):    {safe_rsi:.1f}\n"
+                f"• Volatility:  {safe_regime} (ATR: {atr_val if atr_val else 0:.5f})\n"
+                f"• Hybrid Conf: {conf_str}\n"
+                f"----------------------------------------------------\n"
+                f"RATIONALE:     {factors_str}\n"
+                f"===================================================="
+            )
+            logger.info(hedge_plan_log)
             
             # Execute hedge order
             result = broker.execute_order(

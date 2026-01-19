@@ -51,16 +51,13 @@ def setup_environment():
         if os.path.exists(pkg_env_path):
             load_dotenv(pkg_env_path)
 
-    # 3. Pre-load Heavy Libraries (Torch)
-    # This prevents DLL loading hangs on some Windows systems
+    # 3. Pre-load Heavy Libraries (Torch) - Clean startup
     from src.constants import SYSTEM_VERSION
-    print(f">>> [SYSTEM] Starting Aether Bot v{SYSTEM_VERSION} (The Architect)...", flush=True)
-    print(">>> [SYSTEM] Pre-loading AI Libraries (Torch)...", flush=True)
+    print(f"\\n🚀 AETHER v{SYSTEM_VERSION} | Initializing...", flush=True)
     try:
         import torch
-        print(">>> [SYSTEM] AI Libraries Loaded.", flush=True)
     except ImportError:
-        print(">>> [WARN] Torch not found. AI features may be limited.", flush=True)
+        pass
 
     # Optional runtime trace to prove which code is actually executing.
     # Enable with: AETHER_RUNTIME_TRACE=1
@@ -76,9 +73,9 @@ def setup_environment():
             print(f">>> [TRACE] Runtime trace failed: {e}", flush=True)
 
 def optimize_process():
-    """Apply OS-level process optimizations."""
+    """Apply OS-level process optimizations - Silent mode."""
     
-    # 1. Set High Process Priority
+    # 1. Set High Process Priority - Silent
     if psutil:
         try:
             p = psutil.Process(os.getpid())
@@ -86,17 +83,11 @@ def optimize_process():
                 p.nice(psutil.HIGH_PRIORITY_CLASS)
             else:
                 p.nice(-10) # High priority on Linux
-            print("[INFO] SYSTEM: Process Priority set to HIGH for maximum speed.")
-        except Exception as e:
-            print(f"[WARN] SYSTEM: Could not set high priority: {e}")
-    else:
-        print("[WARN] SYSTEM: 'psutil' not found. Install with 'pip install psutil' for maximum speed.")
-
-    # 2. Tune Garbage Collector
-    # Delay GC to prevent micro-stutters during trading
-    # Thresholds: (700, 10, 10) -> (5000, 10, 10)
+        except Exception:
+            pass
+    
+    # 2. Tune Garbage Collector - Silent
     gc.set_threshold(5000, 10, 10)
-    print("[INFO] SYSTEM: Garbage Collector tuned for low-latency (Safe Mode).")
 
 def main():
     """CLI Entry Point."""
@@ -112,9 +103,9 @@ def main():
         asyncio.run(bot_main())
         
     except KeyboardInterrupt:
-        print("\n>>> [SYSTEM] Shutdown requested by user.")
+        print("\\n>>> [SYSTEM] Shutdown requested by user.")
     except Exception as e:
-        print(f"\n>>> [FATAL] System Crash: {e}")
+        print(f"\\n>>> [FATAL] System Crash: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

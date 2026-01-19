@@ -482,7 +482,7 @@ class TradingEngine:
         obi_ok = bool(tick.get('obi_ok', False))
         obi_applicable = bool(tick.get('obi_applicable', False))
 
-        logger.info(
+        logger.debug(
             "[DATA_TRACE] "
             f"symbol={symbol} broker={type(self.broker).__name__ if self.broker else None} "
             f"tick_ts={tick_ts:.0f} tick_age_s={tick_age:.2f} "
@@ -1801,11 +1801,15 @@ class TradingEngine:
             )
             
             # 2. Check for significant changes (communicate periodically)
+            # [DAMPENING] Only log significant non-critical changes every 60 seconds
+            now = time.time()
+            last_log_ts = last_state.get('last_log_ts', 0)
+            
             is_significant = (
-                abs(current_state['pnl_pips'] - last_state.get('pnl_pips', 0)) > 20 or
-                abs(current_state['rsi'] - last_state.get('rsi', 0)) > 15 or
-                not last_state  # First time
-            )
+                (abs(current_state['pnl_pips'] - last_state.get('pnl_pips', 0)) > 20 or
+                 abs(current_state['rsi'] - last_state.get('rsi', 0)) > 15) and
+                (now - last_log_ts > 60.0) # Dampener
+            ) or (not last_state) # First time
             
             should_log = is_critical or is_significant
             
@@ -1936,9 +1940,10 @@ class TradingEngine:
                         f"Status: {'Inside zone - normal monitoring' if zone_status == 'INSIDE' else 'Outside zone - watching closely'}\n"
                     )
                 
-                # Log the intelligent, context-aware message
-                logger.info(f"\n{message}")
+                # [LEGACY] Demoted to DEBUG - rely on Entry/Hedge/Exit reports only
+                logger.debug(f"\n{message}")
                 
+                current_state['last_log_ts'] = time.time()
                 self._last_ai_state[state_key] = current_state
 
         # Initialize bucket_closed to False
@@ -2109,8 +2114,8 @@ class TradingEngine:
             if not hedge_approved:
                  # [PLAN B] If Hedge is blocked by Constitution (e.g. Volatility Cap hit),
                  # we enforce "Reversion Escape" (Plan B) to exit at break-even instead of stacking risk.
-                 logger.warning(f"⚖️ [ZONE_CHECK] Hedge BLOCKED by Supreme Court: {hedge_reason}")
-                 logger.info(f"🛡️ [PLAN B] Activating Reversion Escape Protocol for {symbol}")
+                 logger.debug(f"⚖️ [ZONE_CHECK] Hedge BLOCKED by Supreme Court: {hedge_reason}")
+                 logger.debug(f"🛡️ [PLAN B] Activating Reversion Escape Protocol for {symbol}")
                  setattr(self, f"_plan_b_veto_{symbol}", True)
                  return bucket_closed
 
@@ -3173,31 +3178,37 @@ class TradingEngine:
                 virtual_tp_price = entry_price - (tp_pips / pip_multiplier)
 
             # Generate Clean Entry Summary
+            # Generate Clean Entry Summary with Live Data
             adaptive_strat = signal.metadata.get('adaptive_strategy', 'STANDARD')
+            
+            # Extract Live Metrics
+            rsi_val = float(signal.metadata.get('rsi', 50.0))
+            trend_val = float(signal.metadata.get('trend_strength', 0.0))
+            oracle_conf = float(signal.metadata.get('oracle_confidence', 0.0))
+            oracle_pred = signal.metadata.get('oracle_prediction', 'NEUTRAL')
+            
+            # Smart formatting
+            rsi_desc = "Oversold" if rsi_val < 30 else "Overbought" if rsi_val > 70 else "Neutral"
+            trend_desc = "Strong UP" if trend_val > 0.5 else "Strong DOWN" if trend_val < -0.5 else "No Trend"
+            
             summary = (
-                f"\n>>> [AI ENTRY PLAN] <<<\n"
-                f"Initial Trade: {signal.action.value} {lot_size} lots @ {entry_price:.5f}\n"
-                f"Mode:          {adaptive_strat} (Validation: {validation_score:.0%})\n"
+                f"\n>>> [AI ENTRY PLAN] 🧠 <<<\n"
+                f"Action:        {signal.action.value} {lot_size} lots @ {entry_price:.5f}\n"
+                f"Strategy:      {adaptive_strat} (Confidence: {validation_score:.0%})\n"
                 f"Virtual TP:    {virtual_tp_price:.5f} (+{tp_pips:.1f} pips)\n"
                 f"----------------------------------------------------\n"
-                f"Strategy:      {signal.metadata.get('worker', 'Unknown')}\n"
-                f"Regime:        {signal.metadata.get('regime', 'Unknown')}\n"
-                f"AI Analysis:   {signal.reason}\n"
+                f"LIVE DATA SNAPSHOT:\n"
+                f"• RSI (14):    {rsi_val:.1f} ({rsi_desc})\n"
+                f"• Trend:       {trend_val:.3f} ({trend_desc})\n"
+                f"• Oracle:      {oracle_pred} ({oracle_conf:.0%})\n"
+                f"• Regime:      {signal.metadata.get('regime', 'Unknown')}\n"
+                f"----------------------------------------------------\n"
+                f"RATIONALE:     {signal.reason}\n"
                 f"===================================================="
             )
             
             # [FIX] Windows Console Compatibility - Force clean version on Windows
-            clean_summary = (
-                f"\n>>> [AI ENTRY PLAN] <<<\n"
-                f"Initial Trade: {signal.action.value} {lot_size} lots @ {entry_price:.5f}\n"
-                f"Mode:          {adaptive_strat} (Validation: {validation_score:.0%})\n"
-                f"Virtual TP:    {virtual_tp_price:.5f} (+{tp_pips:.1f} pips)\n"
-                f"----------------------------------------------------\n"
-                f"Strategy:      {signal.metadata.get('worker', 'Unknown')}\n"
-                f"Regime:        {signal.metadata.get('regime', 'Unknown')}\n"
-                f"AI Analysis:   {signal.reason}\n"
-                f"===================================================="
-            )
+            clean_summary = summary # Use same detailed summary for Windows now that we have good formatting
             
             import sys
             if sys.platform == 'win32':
@@ -3464,14 +3475,8 @@ class TradingEngine:
                 status_msg += "\n----------------------------------------------------"
 
                 
-                import sys
-                if sys.platform == 'win32':
-                    ui_logger.info(status_msg)
-                else:
-                    try:
-                        ui_logger.info(status_msg)
-                    except Exception:
-                        ui_logger.info(status_msg)
+                # Demoted to DEBUG to rely on TraderDashboard for UI
+                logger.debug(status_msg)
 
             # --- CENTRALIZED MANAGEMENT DELEGATION ---
             # All hedging, recovery, and exit logic must go through 'process_position_management'.

@@ -1672,7 +1672,7 @@ class PositionManager:
             # --- LAYER 3: SURVIVAL PROTOCOL (Target Decay) ---
             # If we are deep in hedges (Hedge 3+), drop target to break-even ($0.50)
             # Initial (1) + H1 (2) + H2 (3) + H3 (4)
-            is_survival_mode = len(positions) >= 4
+            is_survival_mode = len(positions) >= 10  # Increased from 4 to 10
             
             # Position P&L calculation
             volume = first_pos.volume
@@ -1713,7 +1713,7 @@ class PositionManager:
                     
                     # DEBUG LOGGING FOR TP DIAGNOSIS
                     if profit_pips > (final_tp_pips * 0.8):
-                        logger.info(f"[TP CHECK] {first_pos.symbol} BUY | Price: {exit_price:.2f} | Entry: {entry_price:.2f} | Profit: {profit_pips:.1f} pips | Target: {final_tp_pips:.1f} pips (Base: {scalping_tp_pips:.1f}) | Exit: {profit_exit}")
+                        logger.debug(f"[TP CHECK] {first_pos.symbol} BUY | Price: {exit_price:.2f} | Entry: {entry_price:.2f} | Profit: {profit_pips:.1f} pips | Target: {final_tp_pips:.1f} pips (Base: {scalping_tp_pips:.1f}) | Exit: {profit_exit}")
                         
                 else:  # SELL
                     profit_pips = (entry_price - exit_price) * pip_multiplier
@@ -1721,7 +1721,7 @@ class PositionManager:
                     
                     # DEBUG LOGGING FOR TP DIAGNOSIS
                     if profit_pips > (final_tp_pips * 0.8):
-                        logger.info(f"[TP CHECK] {first_pos.symbol} SELL | Price: {exit_price:.2f} | Entry: {entry_price:.2f} | Profit: {profit_pips:.1f} pips | Target: {final_tp_pips:.1f} pips (Base: {scalping_tp_pips:.1f}) | Exit: {profit_exit}")
+                        logger.debug(f"[TP CHECK] {first_pos.symbol} SELL | Price: {exit_price:.2f} | Entry: {entry_price:.2f} | Profit: {profit_pips:.1f} pips | Target: {final_tp_pips:.1f} pips (Base: {scalping_tp_pips:.1f}) | Exit: {profit_exit}")
 
                 # === USD-BASED FALLBACK CHECK ===
                 # If pip-based check fails (due to bad tick data), check actual broker profit
@@ -1786,7 +1786,7 @@ class PositionManager:
                 elif num_trades >= 3:
                     # Survival Mode: Just cover costs + small profit ($5.00)
                     target_profit_usd = 5.0
-                    logger.info(f"[SURVIVAL] 3+ Trades Active! Target SLASHED to $5.00 (Survival Mode)")
+                    logger.debug(f"[SURVIVAL] 3+ Trades Active! Target SLASHED to $5.00 (Survival Mode)")
                 else:
                     target_profit_usd = base_target_usd
 
@@ -1795,7 +1795,7 @@ class PositionManager:
                 
                 # [DEBUG] Detailed Exit Calculation Log
                 if len(positions) >= 2:
-                    logger.info(f"[EXIT CALC] {bucket_id} | Net PnL: ${net_pnl:.2f} | Target: ${target_profit_usd:.2f} | Trades: {num_trades} | VolRatio: {volatility_ratio:.2f}")
+                    logger.debug(f"[EXIT CALC] {bucket_id} | Net PnL: ${net_pnl:.2f} | Target: ${target_profit_usd:.2f} | Trades: {num_trades} | VolRatio: {volatility_ratio:.2f}")
 
                 # [ENHANCEMENT] Stalemate Breaker Logic
                 # If stuck for too long, reduce target
@@ -1806,7 +1806,7 @@ class PositionManager:
                 effective_target = target_profit_usd
                 status_msg = ""
                 
-                if len(positions) >= 4:
+                if len(positions) >= 10:  # Increased from 4 to 10
                     if duration_minutes > 45:
                         effective_target = 0.50 # Escape
                         status_msg = " [ESCAPE: Deep Hedge > 45m]"
@@ -1950,7 +1950,7 @@ class PositionManager:
                     ai_exit = ppo_exit
                     ai_confidence = ppo_conf
                     if ai_exit:
-                        logger.info(f"[PPO_EXIT] BUCKET EXIT: {ppo_reason} | Confidence: {ppo_conf:.2f}")
+                        logger.debug(f"[PPO_EXIT] BUCKET EXIT: {ppo_reason} | Confidence: {ppo_conf:.2f}")
                 elif ppo_guardian:
                     # SINGLE POSITION: NO AI EXIT - Uses broker TP/SL for instant execution
                     # AI exits only apply to buckets (multiple positions) for intelligent management
@@ -1999,7 +1999,7 @@ class PositionManager:
                 # Dynamic buffer: higher in volatile markets
                 base_buffer = 2.0 if volatility_ratio > 1.5 else 0.50
                 # Heavier buffer for deeper buckets (execution risk grows with size)
-                if len(positions) >= 4:
+                if len(positions) >= 10:  # Increased from 4 to 10
                     base_buffer *= 2.0  # e.g., $1.0 -> $2.0, $2.0 -> $4.0
 
                 # [CALIBRATION] Replace static buffer with rolling P95-based buffer when available
@@ -2010,10 +2010,10 @@ class PositionManager:
                     if str(os.getenv("AETHER_SLIPPAGE_CALIBRATION_LOG", "1")).strip().lower() in ("1", "true", "yes", "on"):
                         sc = self._get_slippage_sample_count(first_pos.symbol)
                         p95pl = self._get_slippage_p95_per_lot_usd(first_pos.symbol)
-                        logger.info(
+                        logger.debug(
                             f"[CALIBRATED BUFFER] {bucket_id}: base=${base_buffer:.2f} calibrated=${min_profit_buffer:.2f} vol={total_volume_for_buffer:.2f} p95_per_lot=${p95pl:.4f} mult={self._slippage_p95_multiplier:.2f} samples={sc}"
                         )
-                    logger.info(
+                    logger.debug(
                         f"[VETO] Exit blocked for {bucket_id}: Net ${net_pnl:.2f} < Buffer ${min_profit_buffer:.2f}."
                     )
                     should_close = False
@@ -2547,14 +2547,14 @@ class PositionManager:
 
         # Estimate dynamic buffer similar to should_close_bucket
         # Without market_data here, approximate volatility via bucket size
-        approx_vol_ratio = 2.0 if len(positions) >= 4 else 1.0
+        approx_vol_ratio = 2.0 if len(positions) >= 10 else 1.0  # Increased from 4 to 10
         base_buffer = 2.0 if approx_vol_ratio > 1.5 else 0.50
         
         # [FIX] Relax buffer for GHOST_PROTOCOL to avoid loops on small profits
         if stats.exit_reason == "GHOST_PROTOCOL":
             base_buffer = 0.10
 
-        if len(positions) >= 4:
+        if len(positions) >= 10:  # Increased from 4 to 10
             base_buffer *= 2.0
 
         # [CALIBRATION] Apply rolling P95-based buffer when available
@@ -2614,7 +2614,42 @@ class PositionManager:
         bucket_start_time = stats.open_time
         bucket_duration = time.time() - bucket_start_time
 
-        logger.info(f"[CLOSING] Bucket: {bucket_id} | {len(positions)} positions | ${total_pnl:.2f}")
+        # Generate Detailed Exit Report
+        duration_min = bucket_duration / 60.0
+        exit_reason_str = stats.exit_reason if stats.exit_reason else "Manual/Unknown"
+        
+        # Pips calculation (approximate)
+        total_pips = 0.0
+        if "XAU" in symbol:
+            pip_val = 0.01
+        elif "JPY" in symbol:
+            pip_val = 0.01
+        else:
+            pip_val = 0.0001
+            
+        # Calculate raw pips gained
+        for pos in positions:
+            diff = (pos.price_current - pos.price_open) if pos.type == 0 else (pos.price_open - pos.price_current)
+            total_pips += diff / pip_val
+
+        # Formatting duration
+        if duration_min < 60:
+            dur_str = f"{duration_min:.1f}m"
+        else:
+            dur_str = f"{duration_min/60.0:.1f}h"
+
+        exit_report = (
+            f"\n>>> [EXIT REPORT] 🏁 <<<\n"
+            f"Symbol:        {symbol} (Bucket: {bucket_id})\n"
+            f"Net PnL:       ${total_pnl:+.2f} ({total_pips:+.1f} pips)\n"
+            f"Volume:        {total_volume:.2f} lots ({len(positions)} pos)\n"
+            f"----------------------------------------------------\n"
+            f"Duration:      {dur_str}\n"
+            f"Reason:        {exit_reason_str}\n"
+            f"Confidence:    {stats.exit_confidence:.0%}\n"
+            f"===================================================="
+        )
+        logger.info(exit_report)
         
         # Wait for the close to complete
         close_results = await close_task

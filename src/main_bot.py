@@ -219,7 +219,7 @@ class AetherBot:
             zone_config = ZoneConfig(
                 zone_pips=self.config.get('risk', {}).get('zone_recovery', {}).get('zone_pips', 25),
                 tp_pips=self.config.get('risk', {}).get('zone_recovery', {}).get('tp_pips', 25),
-                max_hedges=self.config.get('risk', {}).get('zone_recovery', {}).get('max_layers', 5)
+                max_hedges=self.config.get('risk', {}).get('zone_recovery', {}).get('max_layers', 10)
             )
             self.risk_manager = RiskManager(zone_config)
             

@@ -31,7 +31,7 @@ class TradeAuthority:
         # --- THE CONSTITUTION (Immutable Laws) ---
         # --- THE CONSTITUTION (Immutable Laws) ---
         self.max_global_positions_base = 10 # [TREASURY] GLOBAL HARD CAP
-        self.max_hedges_per_symbol = 5 # Default Base
+        self.max_hedges_per_symbol = 10 # Default Base (User requested increase)
         
         # Current State
         self.current_global_cap = self.max_global_positions_base
@@ -60,14 +60,14 @@ class TradeAuthority:
         
         # Note: ATR thresholds dependent on timeframe/asset. Assuming Gold M1 approx.
         if atr_value > 2.0: 
-            self.current_hedge_cap = 4
+            self.current_hedge_cap = 8  # High volatility: reduce from 10 to 8
             self.volatility_state = "HIGH_VOLATILITY (Defense Mode)"
             # Global cap remains 10 (or lower if needed)
         elif atr_value < 1.0:
-            self.current_hedge_cap = 6
+            self.current_hedge_cap = 12  # Low volatility: allow expansion to 12
             self.volatility_state = "LOW_VOLATILITY (Expansion Mode)"
         else:
-            self.current_hedge_cap = 5
+            self.current_hedge_cap = 10  # Normal: use base 10
             self.volatility_state = "NORMAL"
             
         # Global Cap is always HARD LIMIT 10 (as per user request)
