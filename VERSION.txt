@@ -1,4 +1,4 @@
-﻿v6.6.4 (LOG CLEANUP & STABILITY) - 2026-01-19
+﻿v6.6.5 (LOG CLEANUP & STABILITY) - 2026-01-19
 ----------------------------------------------------------------
 [IMPROVEMENT] Log System Refactor:
       - Integrated "TraderDashboard" for cleaner console output.
