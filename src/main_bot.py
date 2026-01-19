@@ -16,6 +16,7 @@ Version: 5.5.8
 """
 
 import asyncio
+from datetime import datetime
 import logging
 import signal
 import time
@@ -42,6 +43,7 @@ from .infrastructure.async_database import get_async_database_manager
 # Import NEW Intelligence Layers
 from .ai_core.oracle import Oracle
 from .utils.news_filter import NewsFilter
+from .automation.auto_quant import AutoQuant # [NEW] Self-Improvement Module
 
 # Import existing components (to be gradually migrated)
 
@@ -128,8 +130,17 @@ class AetherBot:
         self.last_console_update = 0.0
         self.console_update_interval = 10.0  # Seconds
         
+        # Maintenance state
+        self.last_maintenance_date = None
+        
         # Decision tracking for rolling logs (reduces noise)
         self.decision_tracker = DecisionTracker()
+
+        # Decision tracking for rolling logs (reduces noise)
+        self.decision_tracker = DecisionTracker()
+
+        # Automation
+        self.auto_quant = AutoQuant()
 
         logger.info("AETHER Bot initialized")
 
@@ -366,6 +377,9 @@ class AetherBot:
 
                 await self._run_trading_cycle()
 
+                # [AUTOMATION] Weekend Self-Improvement
+                await self._check_weekend_maintenance()
+
                 # Adaptive sleep: Balanced latency for active positions
                 has_positions = len(self.position_manager.active_positions) > 0
                 if has_positions:
@@ -444,6 +458,31 @@ class AetherBot:
         """Print a clean status dashboard to the console."""
         # DISABLED: User requested to disable rolling logs
         return
+
+    async def _check_weekend_maintenance(self) -> None:
+        """
+        Check if we are in a weekend window and run self-improvement.
+        Auto-runs AutoQuant on Saturdays/Sundays once per day.
+        """
+        now = datetime.now()
+        is_weekend = now.weekday() >= 5 # 5=Sat, 6=Sun
+        
+        # Check if already ran today
+        today_str = now.strftime("%Y-%m-%d")
+        if self.last_maintenance_date == today_str:
+            return
+            
+        if is_weekend:
+            logger.info(f"[MAINTENANCE] Weekend Detected ({now.strftime('%A')}). Initiating Self-Improvement Protocol...")
+            print(f">>> [SYSTEM] Weekend Maintenance: Training Oracle Model...", flush=True)
+            
+            # Run in thread to avoid blocking heartbeat
+            try:
+                await asyncio.to_thread(self.auto_quant.run_cycle)
+                self.last_maintenance_date = today_str
+                print(f">>> [SYSTEM] Maintenance Complete. Model Updated.", flush=True)
+            except Exception as e:
+                logger.error(f"Maintenance failed: {e}")
 
     async def _shutdown(self) -> None:
         """Perform graceful shutdown."""
