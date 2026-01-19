@@ -85,7 +85,17 @@
       },
       "pnl": -935.9034619335346,
       "timestamp": 1768809923.8491638
+    },
+    {
+      "params": {
+        "velocity_threshold": 0.65,
+        "min_viable_move_mult": 2.0,
+        "transformer_heads": 4,
+        "risk_reward_ratio": 1.5
+      },
+      "pnl": -792.8952317486824,
+      "timestamp": 1768813445.1714792
     }
   ],
-  "timestamp": 1768809923.8502655
+  "timestamp": 1768813445.1741297
 }

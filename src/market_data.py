@@ -366,6 +366,12 @@ class MarketDataManager:
         self.last_obi_applicable = bool(hasattr(broker_adapter, 'get_order_book'))
         self.last_obi_ok = False
 
+        # [OPTIMIZATION] Indicator Cache
+        # Stores calculated values until a new candle closes
+        # Key: (symbol, indicator_name, period) -> (value, valid_until_timestamp) OR (value, last_candle_time)
+        self._indicator_cache: Dict[Tuple, Any] = {}
+        self._cache_lock = Lock()
+
         # [PHASE 1] Initialize Correlation Monitor
         self.macro_eye = None
         if config and config.get('trading', {}).get('correlations', {}).get('enable_correlation', False):
@@ -404,14 +410,21 @@ class MarketDataManager:
             return None, False, f"Macro context error: {e}"
 
     def calculate_atr_checked(self, symbol: str, period: int = 14) -> Tuple[Optional[float], bool, str]:
-        """ATR with explicit availability signal.
-
-        Intended for strict entry gating to avoid using synthetic fallbacks.
-        """
+        """ATR with explicit availability signal and Caching."""
         try:
             candles = self.candles.get_history(symbol)
             if not candles or len(candles) < period + 1:
                 return None, False, f"Insufficient candles for ATR: have={len(candles) if candles else 0} need={period + 1}"
+
+            # [OPTIMIZATION] Check Cache
+            last_candle_time = candles[-1]['time']
+            cache_key = (symbol, 'ATR', period)
+            
+            with self._cache_lock:
+                if cache_key in self._indicator_cache:
+                    cached_val, cached_time = self._indicator_cache[cache_key]
+                    if cached_time == last_candle_time:
+                        return cached_val, True, "OK (Cached)"
 
             true_ranges = []
             for i in range(1, len(candles)):
@@ -429,16 +442,31 @@ class MarketDataManager:
             atr = float(sum(true_ranges[-period:]) / period)
             if atr <= 0.0:
                 return None, False, "ATR non-positive"
+            
+            # Update Cache
+            with self._cache_lock:
+                self._indicator_cache[cache_key] = (atr, last_candle_time)
+
             return atr, True, "OK"
         except Exception as e:
             return None, False, f"ATR error: {e}"
 
     def calculate_rsi_checked(self, symbol: str, period: int = 14) -> Tuple[Optional[float], bool, str]:
-        """RSI with explicit availability signal (no neutral fallback)."""
+        """RSI with explicit availability signal and Caching."""
         try:
             candles = self.candles.get_history(symbol)
             if not candles or len(candles) < period + 1:
                 return None, False, f"Insufficient candles for RSI: have={len(candles) if candles else 0} need={period + 1}"
+
+            # [OPTIMIZATION] Check Cache
+            last_candle_time = candles[-1]['time']
+            cache_key = (symbol, 'RSI', period)
+            
+            with self._cache_lock:
+                if cache_key in self._indicator_cache:
+                    cached_val, cached_time = self._indicator_cache[cache_key]
+                    if cached_time == last_candle_time:
+                        return cached_val, True, "OK (Cached)"
 
             gains = []
             losses = []
@@ -453,25 +481,50 @@ class MarketDataManager:
 
             avg_gain = sum(gains[-period:]) / period
             avg_loss = sum(losses[-period:]) / period
+            
+            val_to_cache = 0.0
             if avg_loss == 0:
-                return 100.0, True, "OK"
+                val_to_cache = 100.0
+            else:
+                rs = avg_gain / avg_loss
+                val_to_cache = float(100 - (100 / (1 + rs)))
 
-            rs = avg_gain / avg_loss
-            rsi = float(100 - (100 / (1 + rs)))
-            return rsi, True, "OK"
+            # Update Cache
+            with self._cache_lock:
+                self._indicator_cache[cache_key] = (val_to_cache, last_candle_time)
+
+            return val_to_cache, True, "OK"
         except Exception as e:
             return None, False, f"RSI error: {e}"
 
     def calculate_trend_strength_checked(self, symbol: str, period: int = 20) -> Tuple[Optional[float], bool, str]:
-        """Trend strength with explicit availability signal (no synthetic fallback)."""
+        """Trend strength with explicit availability signal and Caching."""
         try:
+             # [OPTIMIZATION] Check Cache (We need candles first to get timestamp)
+            candles = self.candles.get_history(symbol)
+            if not candles or len(candles) < period:
+                return None, False, "Insufficient candles for trend strength"
+            
+            last_candle_time = candles[-1]['time']
+            cache_key = (symbol, 'TREND_STR', period)
+            
+            with self._cache_lock:
+                if cache_key in self._indicator_cache:
+                    val, time_ = self._indicator_cache[cache_key]
+                    if time_ == last_candle_time:
+                        return val, True, "OK (Cached)"
+
             strength = self.calculate_trend_strength(symbol, period)
-            # Valid strength is 0..1 in current implementation.
             if strength is None:
                 return None, False, "Trend strength missing"
             strength_f = float(strength)
             if not (0.0 <= strength_f <= 1.0):
                 return None, False, f"Trend strength out of range: {strength_f}"
+            
+            # Update Cache
+            with self._cache_lock:
+                self._indicator_cache[cache_key] = (strength_f, last_candle_time)
+
             return strength_f, True, "OK"
         except Exception as e:
             return None, False, f"Trend strength error: {e}"
@@ -490,7 +543,9 @@ class MarketDataManager:
             candles = self.candles.get_history(symbol)
             if not candles or len(candles) < max(10, period):
                 return None, False, f"Insufficient candles for trend direction: have={len(candles) if candles else 0} need={max(10, period)}"
-            v = float(self.calculate_trend_direction(symbol))
+            
+            # [FIX] Pass period to underlying function
+            v = float(self.calculate_trend_direction(symbol, period))
             if not (-1.0 <= v <= 1.0):
                 return None, False, f"Trend direction out of range: {v}"
             return v, True, "OK"
@@ -508,18 +563,29 @@ class MarketDataManager:
         except Exception as e:
             return None, False, f"vol_z error: {e}"
 
-    def calculate_trend_direction(self, symbol: str) -> float:
+    def calculate_trend_direction(self, symbol: str, period: int = 20) -> float:
         """
         Calculates a signed direction-aware trend score.
         Returns:
             float: -1.0 (Strong Downtrend) to +1.0 (Strong Uptrend)
         """
         candles = self.candles.get_history(symbol)
-        if not candles or len(candles) < 20:
+        if not candles or len(candles) < period:
             return 0.0
 
-        # Simple Linear Regression Slope on last 10 closes
-        closes = [c['close'] for c in candles[-10:]]
+        # [OPTIMIZATION] Check Cache
+        last_candle_time = candles[-1]['time']
+        cache_key = (symbol, 'TREND_DIR', period)
+        
+        with self._cache_lock:
+            if cache_key in self._indicator_cache:
+                val, time_ = self._indicator_cache[cache_key]
+                if time_ == last_candle_time:
+                    return val
+
+        # Simple Linear Regression Slope on last N closes
+        # [FIX] Use requested period instead of hardcoded 10
+        closes = [c['close'] for c in candles[-period:]]
         n = len(closes)
         
         # X axis is just 0, 1, 2...
@@ -528,7 +594,8 @@ class MarketDataManager:
         sum_xy = sum(i * closes[i] for i in range(n))
         sum_xx = sum(i * i for i in range(n))
         
-        slope = (n * sum_xy - sum_x * sum_y) / (n * sum_xx - sum_x * sum_x) if (n * sum_xx - sum_x * sum_x) != 0 else 0
+        denom = (n * sum_xx - sum_x * sum_x)
+        slope = (n * sum_xy - sum_x * sum_y) / denom if denom != 0 else 0
         
         # Normalize slope by price (percentage change per bar)
         current_price = closes[-1]
@@ -539,6 +606,10 @@ class MarketDataManager:
         # Clamp to -1.0 to 1.0 (Assuming > 5 bps per bar is strong)
         strength = max(-1.0, min(1.0, norm_slope / 5.0))
         
+        # Update Cache
+        with self._cache_lock:
+            self._indicator_cache[cache_key] = (strength, last_candle_time)
+            
         return strength
 
     def get_volume_z_score(self, symbol: str) -> float:

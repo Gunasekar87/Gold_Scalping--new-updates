@@ -1,0 +1,19 @@
+{
+    "nexus_transformer": {
+        "sequence_length": 64,
+        "num_classes": 3,
+        "embed_dim": 128,
+        "num_heads": 8,
+        "num_layers": 6,
+        "confidence_threshold": 0.30
+    },
+    "ppo_guardian": {
+        "observation_dim": 4,
+        "action_dim": 2,
+        "learning_rate": 0.0003,
+        "gamma": 0.99,
+        "clip_epsilon": 0.2,
+        "batch_size": 64,
+        "n_steps": 2048
+    }
+}
