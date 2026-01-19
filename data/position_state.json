@@ -3,23 +3,15 @@
     "XAUUSD": {
       "bucket_id": "XAUUSD",
       "positions": [
-        226694975,
-        226695103,
-        226695441,
-        226696234,
-        226696823,
-        226700252,
-        226700697,
-        226701106,
-        226857061
+        1415588470
       ],
-      "net_profit": -3028.12,
-      "open_time": 1768809943.144928,
-      "last_update": 1768809943.144928,
+      "net_profit": -0.33,
+      "open_time": 1768818781.0263364,
+      "last_update": 1768818781.0263364,
       "closed": false,
-      "state": "bucket_active",
-      "mode": "bucket",
-      "last_state_check": 1768809943.144928,
+      "state": "single_active",
+      "mode": "single",
+      "last_state_check": 1768818781.0263364,
       "exit_reason": "",
       "last_recovery_time": 0.0
     }
@@ -27,7 +19,38 @@
   "closed_buckets": [
     "XAUUSD"
   ],
-  "active_learning_trades": {},
-  "timestamp": 1768809943.144928,
+  "active_learning_trades": {
+    "1415588470": {
+      "symbol": "XAUUSD",
+      "type": "BUY",
+      "entry_price": 4666.64,
+      "entry_tp_pips": 37.37142857141992,
+      "entry_sl_pips": 0.0,
+      "entry_atr": 1.2457142857139973,
+      "obs": [
+        0.0,
+        1.2457142857139973,
+        0.3,
+        0.6
+      ],
+      "action": [
+        1.0,
+        0.8
+      ],
+      "open_time": 1768818780.1741674,
+      "hedge_plan": {
+        "hedge1_trigger_price": 4666.328571428572,
+        "hedge2_trigger_price": 4666.64,
+        "hedge3_trigger_price": 4666.235142857144,
+        "hedge4_trigger_price": 4666.64,
+        "hedge1_lots": 0.06,
+        "hedge2_lots": 0.12,
+        "hedge3_lots": 0.26,
+        "hedge4_lots": 0.57,
+        "zone_width_pips": "31.14"
+      }
+    }
+  },
+  "timestamp": 1768818781.0263364,
   "slippage_samples_per_lot_usd": {}
 }

@@ -258,11 +258,6 @@ class PositionManager:
         except Exception:
             return 0.0
 
-    def get_total_positions(self) -> int:
-        """Returns the total number of active positions tracked."""
-        with self._lock:
-            return len(self.active_positions)
-
     def _load_state(self) -> None:
         """Load position state from disk."""
         if not os.path.exists(self.state_file):
@@ -333,6 +328,18 @@ class PositionManager:
 
         except Exception as e:
             logger.error(f"Failed to load position state: {e}")
+
+    def get_total_positions(self) -> int:
+        """Returns the total number of active positions tracked."""
+        with self._lock:
+            return len(self.active_positions)
+
+    def _calculate_drawdown(self, balance: float, equity: float) -> float:
+        """Calculate current drawdown percentage."""
+        if balance <= 0:
+            return 0.0
+        drawdown_amount = max(0.0, balance - equity)
+        return drawdown_amount / balance
 
     def _save_state(self) -> None:
         """Persist current state to disk."""

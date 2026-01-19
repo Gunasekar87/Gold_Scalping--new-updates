@@ -148,6 +148,11 @@ class TradingEngine:
         
         # [PHASE 5] The Treasury & Supreme Court
         self.authority = TradeAuthority()
+        logger.info("[INIT] Trade Authority & Risk Governor Online")
+        
+        # [DASHBOARD] Initialize Trader Dashboard link
+        from .utils.trader_dashboard import get_dashboard
+        self.dashboard = get_dashboard()
         logger.info(f"TradeAuthority initialized (Global Cap: {self.authority.current_global_cap})")
 
         # Async database components
@@ -2515,7 +2520,7 @@ class TradingEngine:
                      )
                      
                      if not veto and approved:
-                          await self.broker.execute_order(
+                          self.broker.execute_order(
                                 symbol=symbol,
                                 action="OPEN",
                                 order_type=trap_signal.suggested_action,
@@ -2754,7 +2759,8 @@ class TradingEngine:
                         )
                         
                         if should_block:
-                            logger.warning(f"[WICK INTELLIGENCE] 🚫 Trade BLOCKED: {wick_reason}")
+                            # Use Dashboard for deduped blocking logs
+                            self.dashboard.log_block(f"WICK INTELLIGENCE: {wick_reason}")
                             
                             # Suggest better entry
                             suggested_price = wick_intel.get_safe_entry_suggestion(
@@ -2816,8 +2822,12 @@ class TradingEngine:
                         symbol, {'action': 'HOLD', 'confidence': 0.0, 'reasoning': reason}
                     )
                     if should_log:
-                        # Use print to ensure visibility in console
-                        print(f"[AI THINKING] Regime: {regime.name} | Worker: {worker_name} | Action: HOLD | Reason: {reason}", flush=True)
+                        # Use Dashboard for deduped AI thinking logs
+                        self.dashboard.ai_decision(
+                            prediction="HOLD",
+                            confidence=0.0,
+                            reason=f"{regime.name} | {reason}"
+                        )
                 return
             
             # [CRITICAL FIX] Double Entry Prevention (Thread-Safe)

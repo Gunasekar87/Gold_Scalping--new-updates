@@ -132,6 +132,50 @@ class TraderDashboard:
         self.last_position_count = new_count
         self.last_pnl_bucket = new_bucket
 
+    def log_block(self, reason: str):
+        """
+        Show trade block message (deduplicated)
+        """
+        # Dedup logic: precise string match or same reason category?
+        # For now, simple dedup against last block reason to prevent spam within same minute
+        if getattr(self, 'last_block_reason', None) == reason and \
+           (datetime.now() - getattr(self, 'last_block_time', datetime.min)).seconds < 60:
+            return
+
+        logger.info(f"🛡️ BLOCKED: {reason}")
+        self.last_block_reason = reason
+        self.last_block_time = datetime.now()
+
+    def ai_decision(self, prediction: str, confidence: float, reason: str):
+        """
+        Show AI decision ONLY if meaningful change occurs
+        """
+        # Filter out repetitive HOLDs unless reason changes dramatically
+        if prediction == "HOLD":
+             if getattr(self, 'last_prediction', None) == "HOLD" and \
+                getattr(self, 'last_ai_reason', None) == reason:
+                 return # Silence repetitive holds
+        
+        # Same prediction state?
+        if prediction == self.last_prediction and \
+           reason == getattr(self, 'last_ai_reason', None) and \
+           abs(confidence - getattr(self, 'last_ai_confidence', 0)) < 0.1:
+            return
+        
+        # Confidence indicator
+        if confidence > 0.7:
+            conf_emoji = "🟢"
+        elif confidence > 0.5:
+            conf_emoji = "🟡"
+        else:
+            conf_emoji = "🔴"
+        
+        logger.info(f"🤖 AI: {prediction} {conf_emoji} {confidence*100:.0f}% - {reason}")
+        
+        self.last_prediction = prediction
+        self.last_ai_reason = reason
+        self.last_ai_confidence = confidence
+
 
 # Global instance
 _dashboard = None

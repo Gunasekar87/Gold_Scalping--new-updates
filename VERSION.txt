@@ -1,4 +1,16 @@
-﻿v6.6.3 (IPC CONNECTION HOTFIX) - 2026-01-19
+﻿v6.6.4 (LOG CLEANUP & STABILITY) - 2026-01-19
+----------------------------------------------------------------
+[IMPROVEMENT] Log System Refactor:
+      - Integrated "TraderDashboard" for cleaner console output.
+      - Deduplicated "HOLD" signals and "Wick Intelligence" warnings.
+      - Reduced terminal noise significantly.
+[FIX] Crash Fixes:
+      - Fixed TypeError (await) in Predator execution.
+      - Fixed AttributeError (get_equity) in MT5Adapter.
+      - Fixed AttributeError (_calculate_drawdown) in PositionManager.
+----------------------------------------------------------------
+
+v6.6.3 (IPC CONNECTION HOTFIX) - 2026-01-19
 ----------------------------------------------------------------
 [HOTFIX] MT5 Connection: Fixed "IPC timeout" (-10005) on startup.
       - Implemented "Soft Connect" logic in mt5_adapter.py.

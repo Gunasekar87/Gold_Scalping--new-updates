@@ -416,6 +416,11 @@ class MT5Adapter(BrokerAdapter):
             "leverage": info.leverage
         } if info else {}
 
+    def get_equity(self) -> float:
+        """Helper to get current equity directly."""
+        info = mt5.account_info()
+        return info.equity if info else 0.0
+
     def check_margin(self, symbol: str, volume: float, order_type: str) -> bool:
         """
         Check if there is enough margin to execute the order.
