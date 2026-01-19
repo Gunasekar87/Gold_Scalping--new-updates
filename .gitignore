@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment
+.env
+.venv
+venv/
+ENV/
+
+# Aether Data
+data/market_memory.db*
+data/*.json
+logs/
+.DS_Store
+
+# IDE
+.vscode
+.idea
